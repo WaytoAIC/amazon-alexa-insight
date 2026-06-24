@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alexa 产品洞察 · 使用说明书 · WaytoAIC</title>
+<style>
+:root{
+  --bg:#f1f4f9; --surface:#ffffff; --surface-2:#f7f9fc;
+  --ink:#0f172a; --ink-2:#475569; --muted:#94a3b8;
+  --border:#e8edf4; --border-strong:#d8e0ec;
+  --primary:#1769e0; --primary-2:#3b82f6; --primary-soft:#eaf2fe; --primary-border:#cfe0fb;
+  --green:#17b26a; --green-bg:#e9f9f0; --green-text:#067647;
+  --warn:#b54708; --warn-bg:#fff6e9; --warn-border:#f6d9a8;
+  --danger:#dc2626; --danger-bg:#fef2f2; --danger-border:#f6cdcd;
+  --navy:#141d2e;
+  --shadow-card:0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.06);
+  --radius:16px; --radius-sm:10px;
+  --font:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono","Fira Code",Menlo,monospace;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--bg); color:var(--ink); font-family:var(--font);
+  font-size:15px; line-height:1.7; -webkit-font-smoothing:antialiased;
+}
+a{color:var(--primary); text-decoration:none;}
+code{font-family:var(--mono); font-size:.86em; background:var(--primary-soft); color:#0b4ea8; padding:2px 6px; border-radius:6px; border:1px solid var(--primary-border);}
+
+/* ===== layout ===== */
+.layout{max-width:1180px; margin:0 auto; padding:0 24px; display:flex; gap:36px; align-items:flex-start;}
+.sidebar{
+  position:sticky; top:24px; flex:none; width:212px; padding-top:28px;
+  max-height:calc(100vh - 48px); overflow:auto;
+}
+.sidebar .nav-title{font-size:11px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); margin:0 0 10px; padding-left:12px;}
+.sidebar a{
+  display:block; padding:8px 12px; border-radius:9px; color:var(--ink-2);
+  font-size:14px; font-weight:600; margin-bottom:2px; transition:.15s;
+}
+.sidebar a:hover{background:var(--surface); color:var(--primary);}
+.sidebar a.active{background:var(--primary-soft); color:var(--primary); box-shadow:inset 2px 0 0 var(--primary);}
+.content{flex:1; min-width:0; padding-bottom:80px;}
+
+/* ===== hero ===== */
+.hero{
+  position:relative; overflow:hidden; border-radius:0 0 28px 28px;
+  margin:0 -24px 40px; padding:60px 24px 56px;
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(59,130,246,.5) 0%, rgba(59,130,246,0) 55%),
+    linear-gradient(135deg,#141d2e 0%,#1f3a6b 55%,#1769e0 130%);
+  color:#fff; text-align:center;
+}
+.hero-inner{max-width:1180px; margin:0 auto; padding:0 24px;}
+.hero .brand{display:inline-flex; align-items:center; gap:12px; margin-bottom:22px;}
+.hero .mark{width:46px; height:46px; border-radius:13px; display:grid; place-items:center; background:rgba(255,255,255,.15); box-shadow:inset 0 0 0 1px rgba(255,255,255,.3);}
+.hero h1{margin:0; font-size:38px; font-weight:800; letter-spacing:.3px;}
+.hero .eyebrow{margin:6px 0 0; font-size:12px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase; color:rgba(255,255,255,.72);}
+.hero .lead{max-width:680px; margin:18px auto 0; font-size:17px; color:rgba(255,255,255,.9); line-height:1.65;}
+.hero .pills{display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:26px;}
+.hero .pill{font-size:13px; font-weight:600; padding:7px 14px; border-radius:999px; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); color:#fff;}
+.hero .ver{position:absolute; top:20px; right:24px; font-size:12px; font-weight:700; padding:5px 11px; border-radius:999px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.24);}
+
+/* ===== sections ===== */
+section{scroll-margin-top:24px; margin-bottom:42px;}
+.sec-head{display:flex; align-items:center; gap:13px; margin:0 0 18px;}
+.sec-num{flex:none; width:34px; height:34px; border-radius:11px; display:grid; place-items:center; font-weight:800; font-size:15px; color:#fff; background:linear-gradient(135deg,var(--primary),var(--primary-2)); box-shadow:0 4px 12px rgba(23,105,224,.3);}
+.sec-head h2{margin:0; font-size:24px; font-weight:800; letter-spacing:.2px;}
+.sec-sub{color:var(--ink-2); margin:-8px 0 20px; font-size:15px;}
+
+.card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px 24px; box-shadow:var(--shadow-card); margin-bottom:16px;}
+.card h3{margin:0 0 10px; font-size:17px; font-weight:800;}
+.card p{margin:0 0 10px;}
+.card p:last-child{margin-bottom:0;}
+
+/* steps */
+.steps{counter-reset:step; list-style:none; padding:0; margin:0;}
+.steps>li{position:relative; padding:4px 0 18px 46px; counter-increment:step;}
+.steps>li:before{content:counter(step); position:absolute; left:0; top:0; width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-weight:800; font-size:14px; color:var(--primary); background:var(--primary-soft); border:1px solid var(--primary-border);}
+.steps>li:not(:last-child):after{content:""; position:absolute; left:15px; top:32px; bottom:2px; width:2px; background:var(--border-strong);}
+.steps li strong{font-weight:800;}
+.steps li .desc{color:var(--ink-2); font-size:14px; margin-top:2px;}
+
+/* quick-start grid */
+.qs{display:grid; grid-template-columns:repeat(3,1fr); gap:16px;}
+.qs .card{margin:0; text-align:left;}
+.qs .badge{display:inline-block; font-size:12px; font-weight:800; color:var(--primary); background:var(--primary-soft); border:1px solid var(--primary-border); border-radius:8px; padding:3px 9px; margin-bottom:10px;}
+
+/* tab cards */
+.flow{display:grid; grid-template-columns:repeat(3,1fr); gap:16px;}
+.flow .card{margin:0;}
+.flow .tabname{display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:800; color:#fff; padding:5px 12px; border-radius:999px; margin-bottom:12px; background:linear-gradient(135deg,var(--primary),var(--primary-2));}
+.flow ul{margin:8px 0 0; padding-left:18px; color:var(--ink-2); font-size:14px;}
+.flow ul li{margin-bottom:5px;}
+
+/* table */
+table{width:100%; border-collapse:collapse; font-size:14px; background:var(--surface); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow-card); border:1px solid var(--border);}
+th,td{text-align:left; padding:12px 16px; border-bottom:1px solid var(--border);}
+th{background:var(--surface-2); font-weight:800; color:var(--ink); font-size:13px;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+.muted-cell{color:var(--ink-2);}
+
+/* category grid */
+.catgrid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px;}
+.cat{display:flex; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:13px 15px; box-shadow:var(--shadow-card);}
+.cat .ico{flex:none; font-size:22px; line-height:1.2;}
+.cat .t{font-weight:800; font-size:14.5px; margin-bottom:2px;}
+.cat .d{color:var(--ink-2); font-size:13px; line-height:1.5;}
+.cat.star{border-color:var(--primary-border); background:linear-gradient(180deg,var(--primary-soft),#fff);}
+
+/* callouts */
+.note{border-radius:var(--radius-sm); padding:14px 16px 14px 44px; position:relative; margin:16px 0; font-size:14px; line-height:1.6;}
+.note:before{position:absolute; left:15px; top:13px; font-size:16px;}
+.note.tip{background:var(--green-bg); border:1px solid #b7ebcb; color:#0a5638;}
+.note.tip:before{content:"💡";}
+.note.warn{background:var(--warn-bg); border:1px solid var(--warn-border); color:#7a3a06;}
+.note.warn:before{content:"⚠️";}
+.note.info{background:var(--primary-soft); border:1px solid var(--primary-border); color:#0b4ea8;}
+.note.info:before{content:"ℹ️";}
+.note b{font-weight:800;}
+
+/* FAQ */
+details{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:0; margin-bottom:10px; box-shadow:var(--shadow-card); overflow:hidden;}
+details summary{cursor:pointer; padding:15px 18px; font-weight:700; font-size:15px; list-style:none; display:flex; align-items:center; justify-content:space-between;}
+details summary::-webkit-details-marker{display:none;}
+details summary:after{content:"+"; font-size:20px; color:var(--primary); font-weight:400; transition:.2s;}
+details[open] summary:after{transform:rotate(45deg);}
+details .body{padding:0 18px 16px; color:var(--ink-2); font-size:14px;}
+details .body p{margin:0 0 8px;} details .body p:last-child{margin-bottom:0;}
+
+/* footer */
+.footer{margin:0 -24px; padding:34px 24px; background:var(--navy); color:rgba(255,255,255,.78); text-align:center; border-radius:28px 28px 0 0; font-size:14px;}
+.footer b{color:#fff;}
+.footer .dot{color:var(--primary-2);}
+
+@media (max-width:880px){
+  .sidebar{display:none;}
+  .layout{padding:0 16px;}
+  .qs,.flow,.catgrid{grid-template-columns:1fr;}
+  .hero h1{font-size:30px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== HERO ===== -->
+<div class="hero">
+  <span class="ver">v2.0.1</span>
+  <div class="hero-inner">
+    <div class="brand">
+      <div class="mark">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M8 11h6M11 8v6" opacity="0.55"/></svg>
+      </div>
+      <div style="text-align:left">
+        <h1>Alexa 产品洞察</h1>
+        <p class="eyebrow">WaytoAIC · AI 电商之路</p>
+      </div>
+    </div>
+    <p class="lead">一个 Chrome 浏览器扩展。批量打开亚马逊商品页，自动向 <b>Alexa for Shopping</b>（原 Rufus）提问，把竞品的差评痛点、好评卖点、质量与定价等洞察一次性采集下来，导出成表格。</p>
+    <div class="pills">
+      <span class="pill">🛒 20+ 亚马逊站点</span>
+      <span class="pill">🤖 17 类 · 100+ 问题</span>
+      <span class="pill">📊 一键导出 CSV / Excel / JSON</span>
+      <span class="pill">🔒 本地优先，数据不出本机</span>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- ===== SIDEBAR NAV ===== -->
+  <nav class="sidebar">
+    <p class="nav-title">目录</p>
+    <a href="#what" class="active">这是什么</a>
+    <a href="#install">① 安装插件</a>
+    <a href="#quickstart">② 三步上手</a>
+    <a href="#flow">③ 核心流程</a>
+    <a href="#categories">④ 问题分类</a>
+    <a href="#strategy">⑤ 采集策略</a>
+    <a href="#advanced">⑥ 高级设置</a>
+    <a href="#translate">⑦ 翻译与大模型</a>
+    <a href="#export">⑧ 导出结果</a>
+    <a href="#faq">⑨ 常见问题</a>
+  </nav>
+
+  <!-- ===== CONTENT ===== -->
+  <main class="content">
+
+    <!-- WHAT -->
+    <section id="what">
+      <div class="sec-head"><div class="sec-num">★</div><h2>这是什么，能帮你做什么</h2></div>
+      <div class="card">
+        <p>做亚马逊选品和运营，最值钱的情报藏在<strong>竞品的真实评价里</strong>——差评在抱怨什么、好评在夸什么、客户最想要却没被满足的需求是什么。以前这些要一条条翻评论，现在亚马逊的 AI 导购 <strong>Alexa for Shopping</strong>（2026 年由 Rufus 改名合并而来）已经替你读完了所有评论，你只要会问。</p>
+        <p>这个插件做的事，就是<strong>替你批量地问</strong>：你给它一批竞品 ASIN，选好想了解的角度，它会自动逐个打开商品页、唤起 Alexa、把问题一条条发过去、等回答生成完，再把所有问答整理成一张表交给你。</p>
+        <div class="note info"><b>一句话：</b>把"挨个翻竞品评论 + 手动问 AI"这件重复劳动，变成一次设置、自动跑完、导出表格。</div>
+      </div>
+    </section>
+
+    <!-- INSTALL -->
+    <section id="install">
+      <div class="sec-head"><div class="sec-num">1</div><h2>安装插件</h2></div>
+      <p class="sec-sub">这是一个未上架的「开发者模式」扩展，按下面 5 步加载即可，全程 1 分钟。</p>
+      <div class="card">
+        <ol class="steps">
+          <li><strong>打开 Chrome 扩展管理页</strong><div class="desc">在地址栏输入 <code>chrome://extensions/</code> 回车。（Edge 浏览器用 <code>edge://extensions/</code>，同样支持）</div></li>
+          <li><strong>开启「开发者模式」</strong><div class="desc">页面右上角的开关，打开它。</div></li>
+          <li><strong>点击「加载已解压的扩展程序」</strong><div class="desc">左上角出现的按钮（英文为 Load unpacked）。</div></li>
+          <li><strong>选择本插件文件夹</strong><div class="desc">选中包含 <code>manifest.json</code> 的这个 <code>alexa-insight</code> 目录。</div></li>
+          <li><strong>固定到工具栏</strong><div class="desc">点浏览器右上角拼图图标，把「Alexa 产品洞察」钉住，方便随时点开。</div></li>
+        </ol>
+        <div class="note tip">点击插件图标后，面板会从浏览器<b>右侧边栏</b>滑出（Side Panel 形式），可以和亚马逊页面并排显示，边采集边看进度。</div>
+      </div>
+    </section>
+
+    <!-- QUICK START -->
+    <section id="quickstart">
+      <div class="sec-head"><div class="sec-num">2</div><h2>三步上手</h2></div>
+      <p class="sec-sub">第一次用，照着这三步走，两分钟就能跑出第一批结果。</p>
+      <div class="qs">
+        <div class="card">
+          <span class="badge">STEP 1 · 设置</span>
+          <h3>填竞品、选角度</h3>
+          <p>选目标站点（如 🇺🇸 US），把竞品 ASIN 或商品链接粘进输入框，再勾选想了解的「问题分类」。</p>
+        </div>
+        <div class="card">
+          <span class="badge">STEP 2 · 采集</span>
+          <h3>点「开始采集」</h3>
+          <p>插件自动打开商品页、唤起 Alexa、逐条提问。切到「进度」页看实时日志，期间你可以去做别的事。</p>
+        </div>
+        <div class="card">
+          <span class="badge">STEP 3 · 导出</span>
+          <h3>导出表格分析</h3>
+          <p>跑完自动跳到「结果」页。按 ASIN / 分类筛选，一键导出 CSV、Excel 或 JSON，拿去做对比分析。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FLOW -->
+    <section id="flow">
+      <div class="sec-head"><div class="sec-num">3</div><h2>核心流程：三个标签页</h2></div>
+      <p class="sec-sub">面板顶部有三个标签——<strong>设置 → 进度 → 结果</strong>，正好对应一次采集的全过程。</p>
+      <div class="flow">
+        <div class="card">
+          <span class="tabname">✏️ 设置</span>
+          <p style="font-size:14px;margin:0 0 8px;color:var(--ink-2)">配置这一次要采集什么。</p>
+          <ul>
+            <li><b>目标站点</b>：US / UK / DE / JP 等，决定打开哪个亚马逊。</li>
+            <li><b>竞品 ASIN</b>：支持逗号、换行、商品链接混合粘贴，自动识别去重并显示数量。</li>
+            <li><b>问题分类</b>：勾选要问的角度，下方可展开预览具体问题。</li>
+            <li><b>自定义问题</b>：每行一个，补充你自己的问法。</li>
+            <li><b>保存配置</b>：记住这套设置，下次打开自动带出。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tabname">📈 进度</span>
+          <p style="font-size:14px;margin:0 0 8px;color:var(--ink-2)">实时盯着采集跑到哪了。</p>
+          <ul>
+            <li><b>总体进度条</b>+ 三个计数：ASIN 完成 / 问题完成 / 已采集。</li>
+            <li><b>当前任务</b>：正在问哪个 ASIN 的哪个问题。</li>
+            <li><b>活动日志</b>：每一步的成功/重试/失败都有记录。</li>
+            <li><b>暂停 / 停止 / 清除</b>：随时中断，任务状态会被保存，可恢复。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tabname">📄 结果</span>
+          <p style="font-size:14px;margin:0 0 8px;color:var(--ink-2)">查看、筛选、导出问答数据。</p>
+          <ul>
+            <li><b>结果表</b>：ASIN / 分类 / 问题 / 回答 / 状态。</li>
+            <li><b>筛选</b>：按 ASIN、按问题分类快速过滤。</li>
+            <li><b>导出</b>：CSV、Excel、JSON 三种格式。</li>
+            <li><b>清除</b>：清空本地已存结果。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note tip">采集是<b>断点续传</b>的：中途暂停、关闭面板甚至意外退出，重新打开后任务进度还在，可以接着跑。结果实时存在浏览器本地，不会丢。</div>
+    </section>
+
+    <!-- CATEGORIES -->
+    <section id="categories">
+      <div class="sec-head"><div class="sec-num">4</div><h2>问题分类速查</h2></div>
+      <p class="sec-sub">内置 17 个分类、上百条经过打磨的英文问题，措辞不绑定品类，任何商品都能问。不知道选什么，直接用 <strong>⭐ 核心必问</strong>。</p>
+      <div class="catgrid">
+        <div class="cat star"><div class="ico">⭐</div><div><div class="t">核心必问 / Essentials</div><div class="d">跨所有角度精选的 24 个高价值问题，一次拿到产品全貌，比逐个分类更快。<b>新手首选。</b></div></div></div>
+        <div class="cat"><div class="ico">👎</div><div><div class="t">差评痛点 / Negative</div><div class="d">深挖差评里的抱怨、缺陷与落差，找竞品突破口。</div></div></div>
+        <div class="cat"><div class="ico">👍</div><div><div class="t">好评驱动 / What Customers Love</div><div class="d">5 星好评反复被夸的点，提炼卖点与买点。</div></div></div>
+        <div class="cat"><div class="ico">🔍</div><div><div class="t">质量耐用 / Quality</div><div class="d">材质、做工、耐用度与单位间一致性。</div></div></div>
+        <div class="cat"><div class="ico">⚡</div><div><div class="t">功能卖点 / Features</div><div class="d">核心功能、差异化卖点、宣传与实际的差距。</div></div></div>
+        <div class="cat"><div class="ico">🧭</div><div><div class="t">易用上手 / Ease of Use</div><div class="d">上手难度、学习曲线、清洁与维护。</div></div></div>
+        <div class="cat"><div class="ico">📐</div><div><div class="t">尺寸适配 / Fit &amp; Size</div><div class="d">尺寸规格、是否符合描述、变体与兼容性。</div></div></div>
+        <div class="cat"><div class="ico">⚔️</div><div><div class="t">竞品对比 / Comparison</div><div class="d">与同类头部产品的优劣对比和迁移原因。</div></div></div>
+        <div class="cat"><div class="ico">💰</div><div><div class="t">性价比 / Value &amp; Pricing</div><div class="d">是否值这个价、定价感受、促销规律。</div></div></div>
+        <div class="cat"><div class="ico">🎯</div><div><div class="t">适用人群 / Audience</div><div class="d">最适合谁、最适合的场景、谁该避开。</div></div></div>
+        <div class="cat"><div class="ico">🤔</div><div><div class="t">购买顾虑 / Objections</div><div class="d">让人犹豫不下单的疑虑、误解与临门一脚。</div></div></div>
+        <div class="cat"><div class="ico">❓</div><div><div class="t">高频疑问 / FAQ</div><div class="d">购买前最常被问、最想知道的实际问题。</div></div></div>
+        <div class="cat"><div class="ico">🛡️</div><div><div class="t">售后保障 / After-Sales</div><div class="d">保修、客服响应、退换货体验。</div></div></div>
+        <div class="cat"><div class="ico">📦</div><div><div class="t">物流包装 / Shipping</div><div class="d">包装保护、运输损坏、配送速度。</div></div></div>
+        <div class="cat"><div class="ico">🏆</div><div><div class="t">品牌信任 / Brand &amp; Trust</div><div class="d">品牌口碑、信任度、产品线与定位。</div></div></div>
+        <div class="cat"><div class="ico">💡</div><div><div class="t">改进机会 / Improvement</div><div class="d">客户最想要的改进与未满足需求，给选品/迭代找方向。</div></div></div>
+        <div class="cat"><div class="ico">➕</div><div><div class="t">自定义问题</div><div class="d">在「自定义问题」框里每行写一个，和勾选的分类一起采集。</div></div></div>
+      </div>
+      <div class="note warn">问题越多，跑得越久（每条问题都要等 Alexa 实时生成回答）。第一次建议只选 <b>⭐ 核心必问</b> 加 1–2 个 ASIN 试跑，确认顺畅后再批量。</div>
+    </section>
+
+    <!-- STRATEGY -->
+    <section id="strategy">
+      <div class="sec-head"><div class="sec-num">5</div><h2>采集策略参数</h2></div>
+      <p class="sec-sub">设置页底部的「采集策略」决定插件如何判断"Alexa 答完了"。默认值已经调好，一般不用改。</p>
+      <table>
+        <thead><tr><th style="width:120px">参数</th><th style="width:90px">默认</th><th>作用 &amp; 调整建议</th></tr></thead>
+        <tbody>
+          <tr><td><b>稳定次数</b></td><td><code>3</code></td><td class="muted-cell">回答连续 N 次检查都没有变化，就判定"生成完成"。调高更稳但更慢，调低更快但可能没等答完就进入下一题。范围 2–8。</td></tr>
+          <tr><td><b>间隔 (秒)</b></td><td><code>1.5</code></td><td class="muted-cell">每隔多久检查一次回答还在不在变化。范围 0.5–5 秒。</td></tr>
+          <tr><td><b>超时 (秒)</b></td><td><code>60</code></td><td class="muted-cell">单个问题最长等待时间，安全兜底——超过就跳过，避免卡死。回答普遍较长时可适当调高。范围 15–120。</td></tr>
+        </tbody>
+      </table>
+      <div class="note info">插件会<b>自动检测</b>回答是否还在生成，确认稳定后才发下一题。这三个参数就是在"快"和"稳"之间找平衡，不确定就保持默认。</div>
+    </section>
+
+    <!-- ADVANCED -->
+    <section id="advanced">
+      <div class="sec-head"><div class="sec-num">6</div><h2>高级设置（齿轮按钮）</h2></div>
+      <p class="sec-sub">面板右上角 ⚙️ 进入。大多数人不需要碰，遇到页面改版或想要中文结果时才用。</p>
+
+      <div class="card">
+        <h3>🎯 Alexa / Rufus 选择器配置</h3>
+        <p>亚马逊已把 Rufus 改名 Alexa for Shopping，但页面内部的 DOM 元素仍叫 <code>rufus</code>。插件靠几条 CSS 选择器找到"入口按钮 / 输入框 / 发送按钮 / 回答容器"。</p>
+        <p>如果哪天亚马逊改版导致<strong>唤不起 Alexa 或采不到回答</strong>，可以在这里覆盖默认选择器（填了就优先用你的）。点「恢复默认」可一键还原。</p>
+        <div class="note warn">这是给会看网页源码的人留的"应急修复口"。不懂 CSS 选择器就别动，保持默认即可。</div>
+      </div>
+
+      <div class="card">
+        <h3>⚙️ 其他开关</h3>
+        <table style="box-shadow:none;border:1px solid var(--border)">
+          <tbody>
+            <tr><td style="width:200px"><b>自动滚动到 Alexa 窗口</b></td><td class="muted-cell">采集时把页面滚到 Alexa 对话框，便于观察。默认开。</td></tr>
+            <tr><td><b>失败自动重试</b></td><td class="muted-cell">单条问题失败时自动重试，最多 2 次。默认开，建议保持。</td></tr>
+            <tr><td><b>同时采集标题和价格</b></td><td class="muted-cell">顺带抓取商品标题与价格，写进导出表。默认开，做对比分析很有用。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TRANSLATE -->
+    <section id="translate">
+      <div class="sec-head"><div class="sec-num">7</div><h2>回答处理：翻译与大模型</h2></div>
+      <p class="sec-sub">Alexa 的回答是英文。在高级设置的「🌐 回答处理方式」里，选择英文回答如何落到表里。</p>
+      <table>
+        <thead><tr><th style="width:130px">模式</th><th style="width:90px">速度</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><b>不翻译</b></td><td><span style="color:var(--green-text);font-weight:700">最快</span></td><td class="muted-cell">保留英文原文。想自己读原汁原味、或后续用别的工具处理时选它。</td></tr>
+          <tr><td><b>免费翻译</b></td><td>中等</td><td class="muted-cell">用 MyMemory / Google 免费接口译成中文，零配置，质量一般、长文可能被截断。</td></tr>
+          <tr><td><b>大模型翻译</b></td><td>取决于模型</td><td class="muted-cell"><b>质量最好。</b>调用大模型翻译，需要填接口配置（见下）。导出表里会同时保留中文译文和英文原文。</td></tr>
+        </tbody>
+      </table>
+
+      <div class="card">
+        <h3>配置大模型翻译</h3>
+        <p>选「大模型翻译」后展开配置，支持两类接口：</p>
+        <ul style="margin:0;padding-left:20px;color:var(--ink-2)">
+          <li style="margin-bottom:6px"><b>OpenAI 兼容</b>：本地 Ollama / LM Studio，以及 DeepSeek、OpenRouter 等。<br><span style="font-size:13.5px">Base URL 形如 <code>http://localhost:1234/v1</code>，模型名如 <code>qwen2.5:7b</code>、<code>gpt-4o-mini</code>。本地服务 API Key 可留空。</span></li>
+          <li><b>Anthropic（Claude）</b>：Base URL <code>https://api.anthropic.com</code>，模型如 <code>claude-3-5-haiku-latest</code>。</li>
+        </ul>
+        <p style="margin-top:12px">填好后点 <b>「测试连接」</b>确认通了，再保存。</p>
+        <div class="note tip">优先推荐<b>本地大模型</b>（Ollama / LM Studio）：免费、不限量、隐私好，翻译这种活儿小模型完全够用，数据也不出本机。</div>
+      </div>
+    </section>
+
+    <!-- EXPORT -->
+    <section id="export">
+      <div class="sec-head"><div class="sec-num">8</div><h2>导出结果</h2></div>
+      <p class="sec-sub">「结果」页底部三个导出按钮。CSV 与 Excel 都是带 BOM 的表格文件，Excel / 飞书 / Numbers 直接打开不乱码。</p>
+      <table>
+        <thead><tr><th style="width:130px">格式</th><th>适合场景</th></tr></thead>
+        <tbody>
+          <tr><td><b>CSV / Excel</b></td><td class="muted-cell">表格分析首选。一行一条问答，方便筛选、透视、跨竞品横向对比。</td></tr>
+          <tr><td><b>JSON</b></td><td class="muted-cell">给程序/脚本二次处理，含导出时间等元信息。</td></tr>
+        </tbody>
+      </table>
+      <div class="card">
+        <h3>表格里有哪些字段</h3>
+        <p>每一行是一条问答，包含以下列：</p>
+        <p style="font-family:var(--mono);font-size:13px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;line-height:1.9">
+          ASIN · Product Title（标题）· Price（价格）· Category（分类）·<br>
+          Question（问题）· Answer（回答/译文）· Answer (EN)（英文原文）·<br>
+          Status（状态）· Timestamp（时间戳）
+        </p>
+        <div class="note tip">结果会<b>实时保存在浏览器本地</b>，采集完成时也会自动导出一份 CSV。即使忘了手动导，数据也还在「结果」页里。</div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq">
+      <div class="sec-head"><div class="sec-num">9</div><h2>常见问题排查</h2></div>
+
+      <details open>
+        <summary>没识别到 ASIN？</summary>
+        <div class="body"><p>确认输入里含标准 10 位 ASIN（形如 <code>B0XXXXXXXX</code>），或直接粘贴完整商品链接。输入框下方会实时显示"已识别 N 个 ASIN"，以它为准。</p></div>
+      </details>
+      <details>
+        <summary>Alexa 没打开 / 采不到回答？</summary>
+        <div class="body">
+          <p>最常见原因是<b>亚马逊页面改版</b>，插件找不到 Alexa 入口了。处理顺序：</p>
+          <p>1. 先手动在该商品页确认 Alexa for Shopping 入口确实存在、能用；<br>2. 部分站点 / 部分商品可能尚未开放 Alexa，换个 ASIN 或换 US 站试试；<br>3. 仍不行就到「高级设置 → 选择器配置」更新对应选择器，或点「恢复默认」。</p>
+        </div>
+      </details>
+      <details>
+        <summary>采集速度慢？</summary>
+        <div class="body"><p>瓶颈在 Alexa 实时生成回答，本身就需要等待。可适当调低「稳定次数」或「间隔」，但别太低，否则可能没等答完就跳下一题。更有效的做法是<b>减少每轮的问题数量</b>，用「⭐ 核心必问」代替勾一堆分类。</p></div>
+      </details>
+      <details>
+        <summary>结果会丢吗？存在哪？</summary>
+        <div class="body"><p>不会。结果实时存在<b>浏览器本地存储</b>，关掉面板、重启浏览器都还在，可在「结果」页随时导出。这也意味着数据<b>不上传任何服务器</b>（除非你开了大模型翻译，那部分回答文本会发给你自己配置的翻译接口）。</p></div>
+      </details>
+      <details>
+        <summary>中途能暂停吗？会不会要重头来？</summary>
+        <div class="body"><p>能。「进度」页的暂停 / 停止会保存当前任务状态，重新打开可恢复继续，已采集的部分不会丢，不用重头跑。</p></div>
+      </details>
+      <details>
+        <summary>翻译出来质量不好 / 被截断？</summary>
+        <div class="body"><p>免费翻译（MyMemory / Google）对长文本质量有限。要好结果就切「大模型翻译」，配一个本地 Ollama 或任意 OpenAI 兼容接口；不需要中文的话直接用「不翻译」保留英文原文最稳。</p></div>
+      </details>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===== FOOTER ===== -->
+<div class="footer">
+  <p style="margin:0 0 6px"><b>Alexa 产品洞察</b> · v2.0.1 <span class="dot">·</span> 本地优先，数据不出本机</p>
+  <p style="margin:0;font-size:13px;opacity:.75">WaytoAIC · AI 电商之路 — 把竞品评论里的洞察，自动变成你的选品弹药</p>
+</div>
+
+<script>
+// 目录高亮：滚动时同步左侧导航
+const links = [...document.querySelectorAll('.sidebar a')];
+const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+const obs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      map.get(e.target.id)?.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px', threshold: 0 });
+document.querySelectorAll('section[id]').forEach(s => obs.observe(s));
+</script>
+</body>
+</html>
