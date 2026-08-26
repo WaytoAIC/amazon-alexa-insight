@@ -1,11 +1,22 @@
 # apinsight — Alexa 产品洞察无人化采集 CLI
 
-把插件的「人开着 Chrome、点开始采集」变成一条命令：驱动持久化的真 Chrome，
-逐 ASIN 逐题问 Amazon Alexa for Shopping，抓 SSE 回答落盘，输出与插件同 schema。
+**把 Alexa 问出来的话，变成能算的数据。**
 
-支持多账号轮换、断点续跑、拟人化限速、日配额。
+Amazon 的 AI 导购 Alexa 会基于真实评论回答商品问题——买家在抱怨什么、哪里质量翻车、
+值不值这个价。这套工具把它批量问出来，落成结构化数据。
 
-## ⚠️ 当前状态：需要一次人工登录才能采集
+```
+一批 ASIN  →  逐题问 Alexa  →  抓 SSE 回答  →  CSV / JSON
+```
+
+| 50 个 | 102 题 | 10 秒 | 9 小时 |
+|---|---|---|---|
+| ASIN / 天（各 24 核心题） | 内置题库 16 类 | 单题实测中位（21 题样本） | 跑满一天配额 |
+
+相对插件的改进：不用人盯着、断点续跑、多账号轮换、拟人化限速、日配额、
+结构化自检（`doctor --json`，供 AI agent 消费）。输出 CSV 九列与插件同 schema。
+
+## ⚠️ 一个前提：每台机器每个账号需人工登录一次
 
 **实测（2026-08-26，Mac mini）**：把导出的 cookie 导入 profile 后，账号栏能显示 `Hello, X`，
 浏览、看价格都正常 —— 但 Alexa 面板会显示：
@@ -26,7 +37,8 @@
 
 `apinsight doctor` 会明确区分这两种状态并给出修复命令。
 
-> 换新机器或交给别人用？看 [换机与交接手册.md](换机与交接手册.md)——最短路径，约 30 分钟。
+> 换新机器或交给别人用？看 [换机与交接手册.md](换机与交接手册.md)（给人看）
+> 与 [Agent 操作契约](../AGENTS.md)（给 AI 看）。
 
 ## 安装
 
@@ -42,10 +54,12 @@ cd cli && npm install
 ## 快速开始
 
 ```bash
-# 1. 导入 cookie 建立账号（文件必须在仓库外，且只解析 cookie 段）
-apinsight accounts import --id us-a --file ~/.config/ai-hub/amazon-buyers/buyer-a.json
+# 1. 登记账号。没有 cookie 导出就用 add：
+apinsight accounts add --id us-a
+#    有 cookie 导出可改用 import（文件必须在仓库外，且只解析 cookie 段）：
+#    apinsight accounts import --id us-a --file ~/.config/ai-hub/amazon-buyers/buyer-a.json
 
-# 2. 在本机真实登录一次（Alexa 的硬性要求，见上）
+# 2. 在本机真实登录一次（Alexa 的硬性要求，见上）—— 唯一需要人的一步
 apinsight login --account us-a
 
 # 3. 自检：环境 / 登录态 / Alexa 是否真的可用

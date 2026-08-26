@@ -67,7 +67,9 @@
 
 # Alexa 产品洞察 · Alexa Insight
 
-> Chrome 扩展 · 批量向亚马逊 **Alexa for Shopping**（原 Rufus）提问，自动采集竞品差评痛点、好评卖点与产品洞察，一键导出表格。
+> 批量向亚马逊 **Alexa for Shopping**（原 Rufus）提问，自动采集竞品差评痛点、好评卖点与产品洞察，一键导出表格。
+>
+> 两种用法：**Chrome 扩展**（人工操作，开箱即用）与 **apinsight CLI**（无人值守，可挂定时任务）。
 >
 > A Chrome extension that batch-asks Amazon **Alexa for Shopping** (formerly Rufus) about competitor listings, then collects negative-review pain points, positive selling points, and product insights — exportable as a spreadsheet.
 
@@ -88,7 +90,44 @@
 
 > The most valuable intelligence in Amazon selling lives in **real competitor reviews**. Alexa for Shopping has already read them all — you just need to ask. This extension asks **in batch**: feed it competitor ASINs, pick the angles you care about, and it opens each product page, invokes Alexa, sends every question, waits for each answer to finish, and hands you a clean table of Q&A.
 
-## 🎯 功能 | Features
+---
+
+## ⚡ 两个产物 | Two ways to run
+
+| | Chrome 扩展 | apinsight CLI |
+|---|---|---|
+| 怎么跑 | 人开着浏览器、点「开始采集」 | 一条命令，无人值守 |
+| 适合 | 临时查几个竞品 | 每天定量跑、挂定时任务 |
+| 产能 | 取决于人盯多久 | **50 个 ASIN / 天**（各 24 核心题），约 9 小时跑完 |
+| 入口 | 见下方「安装」 | [`cli/`](cli/) · [README](cli/README.md) |
+
+### apinsight CLI 速览
+
+把「人开着 Chrome 点开始」变成一条命令：驱动持久化的真 Chrome，逐 ASIN 逐题问 Alexa，抓 SSE 回答落盘。
+
+```
+一批 ASIN  →  逐题问 Alexa  →  抓 SSE 回答  →  CSV / JSON
+```
+
+| 50 个 | 102 题 | 10 秒 | 9 小时 |
+|---|---|---|---|
+| ASIN / 天 | 内置题库 16 类 | 单题实测中位 | 跑满一天配额 |
+
+**内建**：多账号轮换 · 断点续跑 · 拟人化限速 · 日配额 · 结构化自检（`doctor --json`，供 AI agent 消费）
+
+```bash
+node bin/apinsight.js accounts add --id us-a
+node bin/apinsight.js login --account us-a        # 唯一需要人的一步
+node bin/apinsight.js collect --asins asins.txt --questions summary_all --max-hours 10
+```
+
+> ⚠️ **一个前提**：每台机器 × 每个账号需要人工登录一次。Amazon 把登录态分两级——重放 cookie 只到「已识别」，而 Alexa 要求「已认证」，必须在那台机器上真实登录。这一步无法自动化，拷 profile 也不行；好在只需一次。
+
+📘 [换机与交接手册](cli/换机与交接手册.md)（给人看） · [Agent 操作契约](AGENTS.md)（给 AI 看）
+
+---
+
+## 🎯 功能 | Features（Chrome 扩展）
 
 - 🛒 **20+ 亚马逊站点** — US / UK / DE / FR / IT / ES / JP / CA / AU / IN 等
 - 🤖 **17 类 · 100+ 内置问题** — 差评痛点、好评驱动、质量耐用、竞品对比、性价比、改进机会等，措辞通用、任何品类都能问；也支持自定义问题
@@ -121,6 +160,7 @@
 ## 🗂️ 目录结构 | Structure
 
 ```text
+cli/          apinsight 无人化采集 CLI（Node + Playwright）
 background/   后台任务编排与状态管理
 content/      Amazon 页面注入脚本与 Alexa 交互逻辑
 data/         预设问题（17 类）
