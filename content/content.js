@@ -113,7 +113,11 @@
   };
   let activeSelectors = DEFAULT_SELECTORS;
   const NETWORK_SOURCE = 'apinsight-net';
-  const MAX_NETWORK_RAW_CHARS = 300000;
+  // ⚠️ 2026-08-26 实测：单题原始 SSE 流实测 152KB–446KB，旧的 300000 上限会被击穿。
+  // 而 Alexa 答案是 JSON Patch 流，创建根节点的 `op:add path:"/"` 就在流的最开头，
+  // 超限时保留尾部丢弃头部 = 根节点丢失 = 后续 patch 全被跳过 = 答案静默变空。
+  // 放大到 2MB 并显式标记截断。与 cli/src/lib/inject/collector-hook.js 同步。
+  const MAX_NETWORK_RAW_CHARS = 2000000;
   const networkStreams = new Map();
   let networkSeq = 0;
   window.__apinsightNetDebug = [];
@@ -176,6 +180,7 @@
       stream.raw += payload.text;
       if (stream.raw.length > MAX_NETWORK_RAW_CHARS) {
         stream.raw = stream.raw.slice(-MAX_NETWORK_RAW_CHARS);
+        stream.truncated = true;   // 截断即不可用：JSON Patch 丢头无法重建
       }
     }
     if (type === 'complete') stream.complete = true;

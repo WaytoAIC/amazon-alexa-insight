@@ -342,9 +342,16 @@ async function waitForNetworkAnswer(page, cursor, question, detectionConfig = {}
     if (!pulled) continue;
 
     let completeAnswer = '';
+    let sawTruncated = false;
     for (const stream of pulled.streams) {
       if (!stream.raw) continue;
       if (!sse.isAssistantStreamingUrl(stream.url)) continue;
+      if (stream.truncated) {
+        // 流被截断 = JSON Patch 根节点已丢失，重建必然为空。
+        // 显式失败比白等 maxWaitTime 再回落要快得多，也更好排查。
+        sawTruncated = true;
+        continue;
+      }
       const candidate = sse.extractAnswerFromAssistantSse(stream.raw, question);
       if (candidate.length > best.length) best = candidate;
       if (stream.complete && candidate.length > completeAnswer.length) completeAnswer = candidate;
@@ -359,6 +366,9 @@ async function waitForNetworkAnswer(page, cursor, question, detectionConfig = {}
     lastBest = best;
 
     if (completeAnswer) return { answer: completeAnswer, source: 'network', complete: true };
+    if (sawTruncated && !best) {
+      throw new Error(`SSE 流超出 ${'2MB'} 上限被截断，JSON Patch 根节点丢失，无法重建答案`);
+    }
   }
 
   if (best) return { answer: best, source: 'network', complete: false, timedOut: true };
