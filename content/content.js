@@ -23,7 +23,13 @@
   //     入口主要靠文字定位（findByText: "Ask something else"）。
   const DEFAULT_SELECTORS = {
     rufusBtn: [
-      // --- Alexa for Shopping 内嵌组件：实测入口是 "Ask something else" 胶囊按钮 ✓ ---
+      // --- 2026-08-26 实测：Alexa 已从商品页内嵌组件改为**全局导航侧边面板** ✓ ---
+      //     入口是导航栏的 #nav-rufus-disco（aria-label "Open Alexa panel"）。
+      //     下方 2026-06 的内嵌组件选择器在当前页面已全部失效，保留作兜底。
+      '#nav-rufus-disco',
+      '[aria-label*="Open Alexa panel" i]',
+      '#nav-flyout-rufus',
+      // --- 2026-06 的商品页内嵌组件（已失效，兜底）---
       '#dpx-nice-widget-container button.ask-pill',
       'button.small-widget-pill.ask-pill',
       '.ask-pill',
@@ -40,8 +46,13 @@
     ],
     rufusInput: [
       // --- Alexa for Shopping：实测输入框（稳定 ID）✓ ---
+      //     ⚠️ 2026-08-26 实测：面板里另有一个**隐藏的反馈输入框**
+      //     #rufus-text-area-inner-N（placeholder "Add your feedback..."），
+      //     且在 DOM 里排更前 —— 泛化的 `... textarea` 选择器会先命中它，
+      //     把问题打进反馈框。故稳定 ID 必须最前，泛化候选一律带 :not() 排除。
       '#rufus-text-area',
-      '#rufus-container-main-view textarea',
+      '#rufus-container-main-view textarea:not([id*="inner"])',
+      '#nav-rufus-content textarea:not([id*="inner"])',
       '.rufus-textarea-wrapper textarea',
       // --- 收窄到含 Alexa 的兜底（避开搜索框） ---
       'textarea[placeholder*="Alexa" i]',
@@ -70,6 +81,9 @@
     ],
     rufusResponse: [
       // --- Alexa for Shopping：每轮问答是一个 #interactionN 容器（实测）✓ ---
+      //     2026-08-26 复核：认证后的侧面板里 #rufus-container-main-view 仍在，
+      //     内部结构未变；补上面板作用域作为更精确的前置候选。
+      '#nav-rufus-content [id^="interaction"]',
       '#rufus-container-main-view [id^="interaction"]',
       '[id^="interaction"]',
       // --- legacy Rufus ---
@@ -257,7 +271,13 @@
   // ===== PRODUCT METADATA =====
   function getProductTitle() {
     const el = findElement(activeSelectors.productTitle);
-    return el ? el.textContent.trim() : '';
+    if (el) return el.textContent.trim();
+    // 兜底：订阅类等非典型商品页不渲染标准商品详情 DOM（实测 B08JHCVHTY
+    // "blink plus plan with monthly auto-renewal" 连 #dp-container 都没有），
+    // 但 document.title 始终带商品名，形如 "Amazon.com: <商品名> : <类目>"。
+    const raw = (document.title || '').trim();
+    const m = raw.match(/^Amazon\.[a-z.]+\s*:\s*(.+?)(?:\s*:\s*[^:]+)?$/i);
+    return (m ? m[1] : raw).trim();
   }
 
   function getProductPrice() {
@@ -486,7 +506,135 @@
       || /\/cl\/streaming/i.test(url || '');
   }
 
+  // ===== JSON Patch 主路（2026-08-26 实测的真实格式）=====
+  //
+  // Alexa 的答案不是"逐段追加文本"，而是 RFC 6902 JSON Patch 流：
+  //   {type:"JSONPatches", patches:[{op:"add"|"replace", path:"/children/0/children/1",
+  //                                  groupId:"markdown_processor_XXX_0", value:{...}}]}
+  // 同一路径会被 replace 上百次（实测单流 193 次 replace / 14 次 add）。
+  //
+  // 下方的 collectAssistantPatchText + buildAnswerFromTextPatches 把见过的每个
+  // value.children 全收集起来，只靠"后面有更长版本包含它"去重 —— 对 JSON Patch 语义
+  // 是错的：中间态全被保留，产出形如「Based on customer reviews for the [**Blink
+  // Subscription Plus / Based on customer reviews for the / , the most common
+  // complaints are:」的重复碎片。正确做法是按序应用 patch 重建文档树再取文本。
+  //
+  // ⚠️ 本段与 cli/src/lib/sse-parser.js 逐字一致，CLI 侧有差分测试锁住，改动需双向同步。
+
+  /** 解析 JSON Pointer 成 token 数组；'/' 表示根 */
+  function parsePointer(path) {
+    if (path === undefined || path === null) return null;
+    const p = String(path);
+    if (p === '' || p === '/') return [];
+    if (p[0] !== '/') return null;
+    return p.slice(1).split('/').map((t) => t.replace(/~1/g, '/').replace(/~0/g, '~'));
+  }
+
+  /** 按 token 路径取容器与末端键 */
+  function locate(root, tokens) {
+    let cur = root;
+    for (let i = 0; i < tokens.length - 1; i++) {
+      const t = tokens[i];
+      if (cur == null) return null;
+      const key = Array.isArray(cur) ? Number(t) : t;
+      cur = cur[key];
+    }
+    return { parent: cur, key: tokens.length ? tokens[tokens.length - 1] : null };
+  }
+
+  /**
+   * 把一条 SSE 流里的 JSONPatches 按序应用，按 groupId 分别重建文档树。
+   * 这是 Alexa 当前真实的答案传输格式（2026-08-26 实测）：
+   * op=add/replace + JSON Pointer + 节点值，同一路径会被 replace 上百次。
+   */
+  function applyJsonPatchStream(payloads) {
+    const trees = new Map();     // groupId -> root
+    for (const msg of payloads) {
+      if (!msg || msg.type !== 'JSONPatches' || !Array.isArray(msg.patches)) continue;
+      for (const p of msg.patches) {
+        const gid = String(p.groupId || '');
+        const tokens = parsePointer(p.path);
+        if (tokens === null) continue;
+
+        if (tokens.length === 0) {
+          // 根节点：add / replace 都是整体设置
+          trees.set(gid, p.value);
+          continue;
+        }
+        const root = trees.get(gid);
+        if (root === undefined) continue;          // 没有根就无从下手
+
+        const loc = locate(root, tokens);
+        if (!loc || loc.parent == null) continue;
+        const { parent, key } = loc;
+
+        if (Array.isArray(parent)) {
+          const idx = key === '-' ? parent.length : Number(key);
+          if (!Number.isFinite(idx)) continue;
+          if (p.op === 'add') parent.splice(idx, 0, p.value);
+          else if (p.op === 'replace') parent[idx] = p.value;
+          else if (p.op === 'remove') parent.splice(idx, 1);
+        } else if (typeof parent === 'object') {
+          if (p.op === 'remove') delete parent[key];
+          else parent[key] = p.value;              // add / replace 同义
+        }
+      }
+    }
+    return trees;
+  }
+
+  /** 遍历重建后的节点树，按文档顺序取出文本 */
+  function textFromNode(node, out) {
+    if (node == null) return;
+    if (typeof node === 'string') { out.push(node); return; }
+    if (Array.isArray(node)) { node.forEach((n) => textFromNode(n, out)); return; }
+    if (typeof node !== 'object') return;
+
+    const t = String(node.type || '');
+    // 结构性换行：段落/列表项之间要断行，否则会糊成一坨
+    const isBlock = /paragraph|list|listitem|heading|container|section/i.test(t);
+    if (isBlock && out.length && out[out.length - 1] !== '\n') out.push('\n');
+
+    if (typeof node.children === 'string') out.push(node.children);
+    else if (node.children !== undefined) textFromNode(node.children, out);
+
+    if (isBlock && out.length && out[out.length - 1] !== '\n') out.push('\n');
+  }
+
+  /** 主路：按 JSON Patch 语义重建答案 */
+  function extractAnswerFromJsonPatches(raw, question) {
+    const payloads = extractSseDataPayloads(raw)
+      .map(tryParseJson)
+      .filter((o) => o && o.type === 'JSONPatches');
+    if (!payloads.length) return '';
+
+    const trees = applyJsonPatchStream(payloads);
+    const pieces = [];
+    for (const [gid, root] of trees) {
+      // 只取答案正文分组，与插件的 markdown_processor 过滤口径一致
+      if (!/markdown_processor/i.test(gid)) continue;
+      const out = [];
+      textFromNode(root, out);
+      const text = out.join('').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+      if (text) pieces.push(text);
+    }
+    if (!pieces.length) return '';
+
+    const answer = stripHtmlEntities(pieces.join('\n\n')).trim();
+    if (question && normalizeComparable(answer) === normalizeComparable(question)) return '';
+    return answer;
+  }
+
   function extractAnswerFromAssistantSse(raw, question) {
+    // 主路：JSON Patch 语义重建（当前真实格式）
+    const viaPatches = extractAnswerFromJsonPatches(raw, question);
+    if (viaPatches) return viaPatches;
+
+    // 兜底：历史启发式（旧格式流仍走它）
+    return extractAnswerFromAssistantSseLegacy(raw, question);
+  }
+
+  function extractAnswerFromAssistantSseLegacy(raw, question) {
     const texts = [];
     const payloads = extractSseDataPayloads(raw);
 

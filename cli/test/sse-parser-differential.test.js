@@ -37,6 +37,8 @@ const sandbox = {
 vm.createContext(sandbox);
 const NAMES = [
   'isAssistantStreamingUrl', 'extractAnswerFromAssistantSse', 'extractSseDataPayloads',
+  'extractAnswerFromAssistantSseLegacy', 'extractAnswerFromJsonPatches',
+  'applyJsonPatchStream', 'textFromNode', 'parsePointer',
   'collectAssistantPatchText', 'buildAnswerFromTextPatches', 'extractAnswerFromNetworkText',
   'splitStreamSegments', 'tryParseJson', 'collectRegexTextCandidates', 'collectTextCandidates',
   'isPreferredTextKey', 'cleanCandidateText', 'isUsefulAnswerText', 'isRelatedQuestionText',
@@ -87,7 +89,7 @@ const CORPUS = [
   sseFrame({ groupId: 'markdown_processor', value: { type: 'text', children: ANSWER } }).repeat(3),
 ];
 
-test('extractAnswerFromAssistantSse：全语料输出逐字节一致', () => {
+test('extractAnswerFromAssistantSse（入口）：全语料输出逐字节一致', () => {
   for (const raw of CORPUS) {
     assert.strictEqual(
       port.extractAnswerFromAssistantSse(raw, QUESTION),
@@ -95,6 +97,34 @@ test('extractAnswerFromAssistantSse：全语料输出逐字节一致', () => {
       `语料差异:\n${raw.slice(0, 120)}`
     );
   }
+});
+
+test('extractAnswerFromAssistantSseLegacy：兜底路径逐字节一致', () => {
+  for (const raw of CORPUS) {
+    assert.strictEqual(
+      port.extractAnswerFromAssistantSseLegacy(raw, QUESTION),
+      orig.extractAnswerFromAssistantSseLegacy(raw, QUESTION),
+      `语料差异:\n${raw.slice(0, 120)}`
+    );
+  }
+});
+
+test('★ extractAnswerFromJsonPatches：主路在真实流上与插件逐字节一致', () => {
+  const REAL = fs.readFileSync(path.join(__dirname, 'fixtures', 'alexa-sse-jsonpatch.txt'), 'utf8');
+  const Q = 'What are the most common complaints in the negative reviews for this product?';
+  const a = port.extractAnswerFromJsonPatches(REAL, Q);
+  const b = orig.extractAnswerFromJsonPatches(REAL, Q);
+  assert.ok(a.length > 500, '移植版应重建出实质答案');
+  assert.strictEqual(a, b, '插件与 CLI 的 JSON Patch 重建结果必须一致');
+});
+
+test('★ 插件入口在真实流上也走主路（不再产出重复碎片）', () => {
+  const REAL = fs.readFileSync(path.join(__dirname, 'fixtures', 'alexa-sse-jsonpatch.txt'), 'utf8');
+  const Q = 'What are the most common complaints in the negative reviews for this product?';
+  const viaPlugin = orig.extractAnswerFromAssistantSse(REAL, Q);
+  const opening = (viaPlugin.match(/Based on customer reviews for the/g) || []).length;
+  assert.strictEqual(opening, 1, `插件修复后开场白应只出现一次，实得 ${opening} 次`);
+  assert.ok(!viaPlugin.includes('[**'), '插件修复后不应残留 markdown 碎片');
 });
 
 test('extractAnswerFromNetworkText：全语料输出逐字节一致', () => {

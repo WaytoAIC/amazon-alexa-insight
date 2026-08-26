@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Alexa 产品洞察",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "批量向亚马逊 Alexa for Shopping（原 Rufus）提问，采集竞品差评痛点与产品洞察 · WaytoAIC",
   "permissions": [
     "activeTab",
