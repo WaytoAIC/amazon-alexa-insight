@@ -1,0 +1,15 @@
+{
+  "name": "apinsight-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Headless collector for Alexa 产品洞察 — drives Amazon Alexa for Shopping via Playwright",
+  "engines": { "node": ">=20" },
+  "bin": { "apinsight": "./bin/apinsight.js" },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "commander": "12.1.0",
+    "playwright": "1.49.1"
+  }
+}
