@@ -30,6 +30,22 @@ function upsertAccount(entry) {
   return cfg;
 }
 
+/**
+ * apinsight accounts add --id us-a
+ * 只登记账号，不导入任何凭据。适用于没有 cookie 导出、直接人工登录的情形。
+ */
+function addAccount(opts) {
+  const { id, marketplace = 'US', maxPerDay = 600 } = opts;
+  if (!id) throw new Error('必须指定 --id');
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error('账号 id 只能用字母数字与 -_');
+
+  const existing = readAccountsConfig().accounts.find((a) => a.id === id);
+  upsertAccount({ id, marketplace, maxPerDay: Number(maxPerDay), enabled: true, proxy: null });
+  console.log(`${existing ? '已更新' : '已登记'}账号 ${id}（站点 ${marketplace}，日配额 ${maxPerDay}）`);
+  console.log(`下一步：apinsight login --account ${id}   # 在本机人工登录一次`);
+  return { id };
+}
+
 /** apinsight accounts import --id us-a --file <仓库外路径> [--line 1] */
 async function importCookies(opts) {
   const log = createLogger({ verbose: opts.verbose });
@@ -193,9 +209,10 @@ async function probeAlexaState(page) {
 function list() {
   const pool = AccountPool.load();
   const rows = pool.summary();
-  const pad = (s, n) => String(s).padEnd(n);
-  console.log(pad('ID', 12) + pad('站点', 6) + pad('状态', 18) + pad('今日用量', 12) + pad('代理', 6) + '备注');
-  console.log('-'.repeat(78));
+  const pad = (s, n) => `${String(s).padEnd(n)} `;   // 列间恒留空格，避免长 id 与下一列黏连
+  const idW = Math.max(10, ...rows.map((r) => r.id.length));
+  console.log(pad('ID', idW) + pad('站点', 5) + pad('状态', 16) + pad('今日用量', 10) + pad('代理', 4) + '备注');
+  console.log('-'.repeat(idW + 45));
   for (const r of rows) {
     const quota = `${r.used}/${r.maxPerDay}`;
     let note = '';
@@ -204,7 +221,7 @@ function list() {
     else if (r.status === STATUS.CAPTCHA_BLOCKED) note = '需人工处理验证码后 enable';
     else if (r.status === STATUS.SIGNIN_EXPIRED) note = '需重新导入 cookie 或 login';
     else if (r.remaining === 0) note = '今日配额已用尽';
-    console.log(pad(r.id, 12) + pad(r.marketplace, 6) + pad(r.status, 18) + pad(quota, 12) + pad(r.hasProxy ? '是' : '否', 6) + note);
+    console.log(pad(r.id, idW) + pad(r.marketplace, 5) + pad(r.status, 16) + pad(quota, 10) + pad(r.hasProxy ? '是' : '否', 4) + note);
   }
   return rows;
 }
@@ -226,4 +243,4 @@ function resetQuota(id) {
   console.log(`账号 ${id} 今日配额已重置`);
 }
 
-module.exports = { importCookies, login, list, setEnabled, resetQuota, readAccountsConfig, upsertAccount, probeAlexaState };
+module.exports = { addAccount, importCookies, login, list, setEnabled, resetQuota, readAccountsConfig, upsertAccount, probeAlexaState };

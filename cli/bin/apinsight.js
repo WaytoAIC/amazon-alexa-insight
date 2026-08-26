@@ -18,6 +18,13 @@ const fail = (e) => {
 // ---- accounts ----
 const acc = program.command('accounts').description('账号池管理');
 
+acc.command('add')
+  .description('登记一个账号（不导入凭据，随后用 login 人工登录）')
+  .requiredOption('--id <id>', '账号 id，如 us-a')
+  .option('--marketplace <mk>', '站点', 'US')
+  .option('--max-per-day <n>', '该账号日配额', '600')
+  .action((o) => { try { require('../src/commands/accounts.js').addAccount(o); } catch (e) { fail(e); } });
+
 acc.command('import')
   .description('从 cookie 导出文件建立账号登录态（文件必须在仓库外；不解析密码与 2FA）')
   .requiredOption('--id <id>', '账号 id，如 us-a')
