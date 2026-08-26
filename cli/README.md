@@ -109,6 +109,39 @@ apinsight collect --resume --retry-errors   # 顺带重试此前的错误行
 `results.jsonl` 是 append-only，每题落盘一次，进程被杀不丢数据（末尾半行会被容忍）。
 问题列表在 run 创建时冻结进 `state.json`，续跑不受题库文件后续改动影响。
 
+## 定时无人值守（macOS LaunchAgent）
+
+必须用 **LaunchAgent**（跑在用户的 Aqua 会话里，能开 headed 窗口），不是 LaunchDaemon。
+写入 `~/Library/LaunchAgents/com.waytoaic.apinsight.plist`：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.waytoaic.apinsight</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string><string>-lc</string>
+    <string>caffeinate -i "$HOME/.local/node/bin/node" "$HOME/apinsight-repo/cli/bin/apinsight.js" collect --asins "$HOME/.apinsight/asins.txt" --questions summary_all --max-hours 10 >> "$HOME/.apinsight/cron.log" 2>&1</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>2</integer><key>Minute</key><integer>0</integer></dict>
+  <key>RunAtLoad</key><false/>
+</dict>
+</plist>
+```
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.waytoaic.apinsight.plist
+```
+
+要点：
+- `caffeinate -i` 防止机器休眠打断长跑
+- `--max-hours` 给 run 级兜底，避免卡死占着账号
+- 按退出码告警：3/4 要人工（验证码 / 重新登录），5 是配额耗尽属正常
+- 每天先 `apinsight doctor` 确认 Alexa 仍可用，再跑采集
+
 ## 输出
 
 run 目录下：

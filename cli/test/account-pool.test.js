@@ -171,3 +171,53 @@ test('summary 输出运维需要的字段', () => {
   assert.deepStrictEqual(Object.keys(s[0]).sort(),
     ['cooldownUntil', 'enabled', 'hasProxy', 'id', 'lastIncident', 'marketplace', 'maxPerDay', 'remaining', 'status', 'used'].sort());
 });
+
+// ---- need 感知选号（避免把配额浪费在会被作废的半截 ASIN 上）----
+
+test('★ 剩余配额够跑完整个 ASIN 时正常选号', () => {
+  const p = mkPool([{ id: 'a', maxPerDay: 30, enabled: true }]);
+  assert.strictEqual(p.acquire({ need: 24 }).id, 'a');
+});
+
+test('★ 当前账号配额不足以跑完整个 ASIN 时，换到够用的账号', () => {
+  const p = mkPool([
+    { id: 'low', maxPerDay: 30, enabled: true },
+    { id: 'high', maxPerDay: 100, enabled: true },
+  ]);
+  const first = p.acquire({ need: 24 });          // high 剩余更多，先选它
+  assert.strictEqual(first.id, 'high');
+  for (let i = 0; i < 80; i++) p.recordQuestion(first, 'success');  // high 剩 20
+  assert.strictEqual(p.remainingQuota(first), 20);
+  assert.strictEqual(p.acquire({ need: 24 }).id, 'low', '不够跑完整个 ASIN 应换号');
+});
+
+test('★ 所有账号都不够跑完一个 ASIN → 不开工，抛配额耗尽（避免白烧请求）', () => {
+  const p = mkPool([
+    { id: 'a', maxPerDay: 30, enabled: true },
+    { id: 'b', maxPerDay: 30, enabled: true },
+  ]);
+  for (const acct of p.accounts) for (let i = 0; i < 20; i++) p.recordQuestion(acct, 'success');
+  // 两个都只剩 10 题
+  assert.strictEqual(p.remainingQuota(p.accounts[0]), 10);
+  try {
+    p.acquire({ need: 24 });
+    assert.fail('应抛 PoolExhaustedError');
+  } catch (e) {
+    assert.ok(e instanceof PoolExhaustedError);
+    assert.strictEqual(e.reason, 'quota');
+    assert.strictEqual(e.exitCode, EXIT_CODE.QUOTA);
+    assert.match(e.message, /只剩 10 题/);
+    assert.match(e.message, /allow-mixed-account/, '应提示可用的出路');
+  }
+});
+
+test('need=1（混账号模式）时不受整段配额约束', () => {
+  const p = mkPool([{ id: 'a', maxPerDay: 30, enabled: true }]);
+  for (let i = 0; i < 25; i++) p.recordQuestion(p.accounts[0], 'success');  // 剩 5
+  assert.strictEqual(p.acquire({ need: 1 }).id, 'a', '混账号模式下剩多少用多少');
+});
+
+test('无参 acquire 保持原行为（need 默认 1）', () => {
+  const p = mkPool();
+  assert.ok(p.acquire().id);
+});

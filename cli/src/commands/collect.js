@@ -26,6 +26,7 @@ const { resolveAsins, productUrl } = require('../lib/asins.js');
 const { createLogger } = require('../lib/log.js');
 
 const NAVIGATION_FAILED = 'NAVIGATION_FAILED';
+const RETRIES_EXHAUSTED = 'RETRIES_EXHAUSTED';
 
 function makeRunId(marketplace) {
   const d = new Date();
@@ -94,6 +95,8 @@ async function collect(opts) {
   if (resuming) log.info(`  已完成 ${done.size} 题，跳过`);
 
   const limit = opts.limit ? Number(opts.limit) : Infinity;
+  const runDeadline = opts.maxHours ? Date.now() + Number(opts.maxHours) * 3600 * 1000 : null;
+  if (runDeadline) log.info(`  run 级总时长上限 ${opts.maxHours} 小时`);
   let asked = 0;
 
   let ctx = null;
@@ -119,7 +122,8 @@ async function collect(opts) {
         attempts++;
         let account;
         try {
-          account = pool.acquire();
+          // 同 ASIN 不跨账号时，必须一次性有足够配额跑完，否则做的功会被作废
+          account = pool.acquire({ need: cfg.allowMixedAccount ? 1 : pending.length });
         } catch (e) {
           if (e instanceof PoolExhaustedError) {
             log.error(e.message);
@@ -132,6 +136,14 @@ async function collect(opts) {
             return finish();
           }
           throw e;
+        }
+
+        // 浏览器可能在无人值守期间崩溃/被关闭；不检查的话后续每个 ASIN 都会失败刷屏
+        const browserDead = ctx && (!page || page.isClosed() || !ctx.browser?.()?.isConnected?.());
+        if (browserDead) {
+          log.warn('  浏览器已断开，重建 context');
+          await closeCtx();
+          currentAccountId = null;
         }
 
         if (account.id !== currentAccountId) {
@@ -276,7 +288,25 @@ async function collect(opts) {
         }
       }
 
+      // 重试次数用尽仍未跑完：必须留痕，否则这个 ASIN 会静默消失
+      //（此前的实现正是插件那种"静默丢弃"缺陷）
+      if (!asinDone && asked < limit) {
+        log.error(`  ${asin} 换过 ${attempts} 个账号仍未跑完，放弃`);
+        state.appendResult({
+          ...exporter.errorRow({ asin, category: '', question: RETRIES_EXHAUSTED,
+            error: `换过 ${attempts} 个账号仍未完成` }),
+          runId: state.data.runId, account: currentAccountId || '',
+        });
+        state.data.counters.asinFailed++;
+      }
+
       if (asked >= limit) break;
+      if (runDeadline && Date.now() > runDeadline) {
+        log.warn(`已达 run 级总时长上限（${opts.maxHours} 小时），停止`);
+        state.setStatus(STATUS.ABORTED, 'run 级总时长超限');
+        exitCode = 2;
+        return finish();
+      }
       await pacer.afterAsin();
     }
 
@@ -318,4 +348,4 @@ function latestRunDir(outDir) {
   return dirs[0] || null;
 }
 
-module.exports = { collect, latestRunDir, NAVIGATION_FAILED };
+module.exports = { collect, latestRunDir, NAVIGATION_FAILED, RETRIES_EXHAUSTED };

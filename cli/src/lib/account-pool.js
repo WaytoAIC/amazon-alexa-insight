@@ -150,17 +150,31 @@ class AccountPool {
    * 选号。sticky：当前账号还能用就继续用，避免无谓切换。
    * 选不出来时抛 PoolExhaustedError，带上区分原因的退出码。
    */
-  acquire() {
-    const current = this.accounts.find((a) => a.id === this.currentId);
-    if (current && this.isUsable(current)) return current;
+  acquire({ need = 1 } = {}) {
+    // need = 这个 ASIN 还要问多少题。
+    // 必须纳入选号：若账号剩余配额不够跑完整个 ASIN，答到一半撞配额后
+    // 「同 ASIN 不跨账号」会把已答的行整体作废 —— 那些题的真实请求就白烧了。
+    const enough = (a) => this.remainingQuota(a) >= need;
 
-    const candidates = this.accounts
-      .filter((a) => this.isUsable(a))
+    const current = this.accounts.find((a) => a.id === this.currentId);
+    if (current && this.isUsable(current) && enough(current)) return current;
+
+    const usable = this.accounts.filter((a) => this.isUsable(a));
+    const candidates = usable
+      .filter(enough)
       .sort((a, b) => {
         const q = this.remainingQuota(b) - this.remainingQuota(a);
         if (q !== 0) return q;
         return (this._refresh(a.id).lastUsedAt || 0) - (this._refresh(b.id).lastUsedAt || 0);
       });
+
+    // 有账号能用但都不够跑完整个 ASIN：不要开工，否则做的功会被作废
+    if (!candidates.length && usable.length) {
+      const best = Math.max(...usable.map((a) => this.remainingQuota(a)));
+      throw new PoolExhaustedError('quota', EXIT_CODE.QUOTA,
+        `剩余配额不足以完整跑完一个 ASIN（需 ${need} 题，最多的账号只剩 ${best} 题）。`
+        + '不开工以免做的功被作废。可等次日配额重置、加账号，或用 --allow-mixed-account 允许同 ASIN 跨账号。');
+    }
 
     if (candidates.length) {
       this.currentId = candidates[0].id;

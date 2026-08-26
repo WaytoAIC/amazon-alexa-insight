@@ -137,6 +137,41 @@ const PAGE_HELPERS = `
   }
 `;
 
+
+/**
+ * 判断一段 DOM 文本是不是 Alexa 面板的 UI 样板，而不是真正的答案。
+ *
+ * 2026-08-26 实测踩到：网络主路超时后，DOM 兜底把面板的欢迎语 + 推荐问题列表 +
+ * 反馈表单整段抓走，还被记成 status=success 入库 —— 静默污染数据集，比报错更糟。
+ */
+function isPanelBoilerplate(text) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return true;
+
+  const MARKERS = [
+    /how can i help\??/i,
+    /your feedback has been submitted/i,
+    /select all that apply/i,
+    /this is (irrelevant|harmful|inaccurate)/i,
+    /why you might like this/i,
+    /what do customers say\?\s*compare with similar/i,
+    /show price history/i,
+    /welcome!?\s*i'?m the new alexa/i,
+    /my answers are powered by ai/i,
+  ];
+  const hits = MARKERS.filter((re) => re.test(t)).length;
+  if (hits >= 2) return true;                       // 多个样板特征同现 = 样板
+  if (/^\{\}/.test(t)) return true;                 // 实测样板常以 "{}" 开头
+
+  // 通篇由问句组成（推荐问题列表），没有陈述句 = 不是答案
+  const sentences = t.split(/(?<=[.?!])\s+/).filter((x) => x.trim().length > 8);
+  if (sentences.length >= 3) {
+    const q = sentences.filter((x) => x.trim().endsWith('?')).length;
+    if (q / sentences.length > 0.7) return true;
+  }
+  return false;
+}
+
 /** 商品标题与价格。插件是每题采一次，CLI 改为每 ASIN 一次（schema 不变） */
 async function collectMetadata(page, selectors = DEFAULT_SELECTORS) {
   return page.evaluate(({ sel, helpers }) => {
@@ -364,7 +399,10 @@ async function waitForDomAnswer(page, responsesBefore, detectionConfig = {}, sel
       continue;
     }
 
-    if (probe.text.length > 0 && probe.text === lastText && !probe.isLoading) {
+    // 质量闸门：面板样板文字不算答案，继续等真正的回答
+    const looksLikeAnswer = probe.text.length > 0 && !isPanelBoilerplate(probe.text);
+
+    if (looksLikeAnswer && probe.text === lastText && !probe.isLoading) {
       stableCount++;
       if (stableCount >= stableChecks) return { answer: probe.text, source: 'dom', complete: false };
     } else {
@@ -373,8 +411,13 @@ async function waitForDomAnswer(page, responsesBefore, detectionConfig = {}, sel
     lastText = probe.text;
   }
 
-  if (lastText.length > 0) return { answer: lastText, source: 'dom', complete: false, timedOut: true };
-  throw new Error(`等待 ${maxWaitTime} 秒后仍未获取到回答`);
+  if (lastText.length > 0 && !isPanelBoilerplate(lastText)) {
+    return { answer: lastText, source: 'dom', complete: false, timedOut: true };
+  }
+  // 宁可报错也不要把面板样板当答案入库
+  throw new Error(lastText.length
+    ? `等待 ${maxWaitTime} 秒，DOM 里只有面板样板文字而非回答`
+    : `等待 ${maxWaitTime} 秒后仍未获取到回答`);
 }
 
 /**
@@ -410,6 +453,7 @@ module.exports = {
   streamCursor,
   waitForNetworkAnswer,
   waitForDomAnswer,
+  isPanelBoilerplate,
   waitForPredicate,
   askAndCapture,
   sleep,
