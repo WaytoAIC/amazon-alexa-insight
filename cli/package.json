@@ -10,6 +10,6 @@
   },
   "dependencies": {
     "commander": "12.1.0",
-    "playwright": "1.49.1"
+    "playwright": "1.62.1"
   }
 }

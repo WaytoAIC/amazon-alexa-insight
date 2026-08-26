@@ -157,21 +157,24 @@ CSV 默认不含 account 列，是为了能和插件的导出直接对照；需�
 
 ## 实测插件本身
 
-Chrome 137+ 移除了 `--load-extension` 自动化通道（Chrome 151 上连
-`--disable-features=DisableLoadExtensionCommandLineSwitch` 也无效），Playwright 自带的
-Chromium 又打不开 Chrome 新版建立的 profile —— 所以没法用自动化真正"安装"插件。
+系统 Chrome 装不了：Chrome 137+ 移除了 `--load-extension` 自动化通道，Chrome 151 上连
+`--disable-features=DisableLoadExtensionCommandLineSwitch` 也无效（CDP `Target.getTargets`
+里扩展 target 数为 0）。**但 Playwright 自带的 Chromium 构建保留了这个能力**，且
+playwright 1.62.1 捆绑的 Chromium 151 与当前系统 Chrome 同主版本，可直接复用
+Chrome 建立的已认证 profile（低版本 Chromium 打开会崩溃）。
 
-变通方案是把 `chrome.runtime` 打桩后注入插件**真实的** `content/content.js`，
-再走 `background.js` 用的同一个入口 `ASK_RUFUS → handleAskAssistant`：
+两个工具，分工不同：
 
 ```bash
+# 快测：注入 content.js 打桩跑，不复制 profile，覆盖采集链路
 cd cli && node tools/plugin-e2e-test.js B0DCH8VDXF
+
+# 全测：真正装扩展，驱动 popup → background → content，额外覆盖消息管道层
+cd cli && node tools/plugin-full-ext-test.js B0DCH8VDXF
 ```
 
-覆盖插件的选择器、开面板、提问、网络捕获、SSE 解析全链路；**未覆盖**的只有
-popup ↔ background ↔ content 的消息管道。退出码 0 表示答案干净（无重复碎片、无 markdown 残渣）。
-
-前置：目标 profile 需已在本机完成真实登录。
+全测会把源 profile 复制成独立的 `ext151`，不污染生产 profile。
+两者都要求源 profile 已在本机完成真实登录。
 
 ## 与插件的行为差异
 
