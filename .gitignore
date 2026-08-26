@@ -16,3 +16,12 @@ temp/
 .env
 .env.*
 
+
+# Credentials — NEVER commit (buyer account cookies / passwords / 2FA codes)
+亚马逊买家号.rtf
+*.rtf
+.apinsight/
+
+# Node / CLI
+node_modules/
+cli/runs/
