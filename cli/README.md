@@ -41,7 +41,7 @@ cd cli && npm install
 
 ```bash
 # 1. 导入 cookie 建立账号（文件必须在仓库外，且只解析 cookie 段）
-apinsight accounts import --id us-a --file ~/.apinsight/secrets/buyer-a.json
+apinsight accounts import --id us-a --file ~/.config/ai-hub/amazon-buyers/buyer-a.json
 
 # 2. 在本机真实登录一次（Alexa 的硬性要求，见上）
 apinsight login --account us-a
@@ -129,6 +129,10 @@ CSV 默认不含 account 列，是为了能和插件的导出直接对照；需�
 
 ## 安全约束
 
+- **凭据由 ai-hub 统一托管**：`~/.config/ai-hub/amazon-buyers/`（700，文件 600），
+  并登记在 `~/dev/ai-hub/registry/inventory.toml` 的不收口层（`amazon-buyer-accounts`）。
+  换机时 `aihub bootstrap` 的恢复清单会列出"每台机器需人工登录一次"这条。
+  cookie 属登录态、收口即失效，**不进 secrets.env**（ai-hub SOP §1.5）
 - 凭据文件**必须在仓库外**，`accounts import` 会拒绝读取 git 工作区内的文件
 - 只解析 cookie 段；密码与 2FA 恢复码不解析、不落盘、不使用
 - 只保留 amazon 自有域 cookie，广告追踪域全部丢弃

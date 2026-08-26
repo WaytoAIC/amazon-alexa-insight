@@ -4,7 +4,7 @@
  *
  * 纯逻辑，无 Playwright 依赖，便于单测。浏览器侧写入在 commands/accounts.js。
  *
- * 实测输入形态（~/.apinsight/secrets/buyer-*.json）：
+ * 实测输入形态（~/.config/ai-hub/amazon-buyers/buyer-*.json）：
  *   { domain, expires, httpOnly, name, path, sameSite, secure, session, value }
  *
  * 两个必须处理的坑：
@@ -107,7 +107,7 @@ function assertOutsideGitRepo(filePath) {
     if (fs.existsSync(path.join(dir, '.git'))) {
       throw new Error(
         `拒绝读取凭据文件：${abs}\n` +
-        `它位于 git 工作区 ${dir} 内。凭据永不进仓 —— 请移到仓库外（建议 ~/.apinsight/secrets/）后重试。`
+        `它位于 git 工作区 ${dir} 内。凭据永不进仓 —— 请移到仓库外（凭据统一由 ai-hub 托管：~/.config/ai-hub/amazon-buyers/）后重试。`
       );
     }
     if (dir === root) break;
