@@ -99,3 +99,35 @@ test('isLoggedIn 需要账号栏与鉴权 cookie 双满足', async () => {
   r = await guard.isLoggedIn(ctx(['x-main', 'at-main']), fakePage('u', { ...OK_PROBE, accountLine: 'Hello, sign in' }));
   assert.strictEqual(r.loggedIn, false, 'cookie 在但账号栏说未登录，不算登录');
 });
+
+// ---- 选择器顺序回归（2026-08-26 实测踩到的坑）----
+const collector = require('../src/lib/collector.js');
+
+test('★ 回归：提问框选择器必须让 #rufus-text-area 优先于泛化 textarea', () => {
+  const list = collector.DEFAULT_SELECTORS.rufusInput;
+  const stable = list.indexOf('#rufus-text-area');
+  assert.ok(stable >= 0, '稳定 ID 必须在候选里');
+  const generic = list.findIndex((s) => /textarea$/.test(s) && !s.includes('#rufus-text-area') && !s.includes(':not('));
+  if (generic >= 0) {
+    assert.ok(stable < generic, `稳定 ID(#${stable}) 必须排在泛化候选(#${generic}) 之前`);
+  }
+});
+
+test('★ 回归：泛化 textarea 候选必须排除隐藏的反馈输入框', () => {
+  // 面板里有 #rufus-text-area-inner-N（placeholder "Add your feedback..."），DOM 顺序更靠前，
+  // 泛化选择器若不排除它，问题会被打进反馈框
+  const list = collector.DEFAULT_SELECTORS.rufusInput;
+  // 只约束"能匹配到当前面板"的候选（#nav-rufus-content / #rufus-view-context /
+  // #rufus-container-main-view 作用域）；legacy 的 .rufus-input / .rufus-composer
+  // 作用域在当前页面根本不存在，不做要求
+  const PANEL_SCOPES = ['#nav-rufus-content', '#rufus-view-context', '#rufus-container-main-view'];
+  for (const sel of list) {
+    if (sel === '#rufus-text-area') continue;
+    if (!PANEL_SCOPES.some((sc) => sel.startsWith(sc))) continue;
+    if (/ textarea$/.test(sel)) {
+      assert.fail(`面板作用域内的泛化 textarea 候选未排除反馈框：${sel}`);
+    }
+  }
+  const guarded = list.filter((s) => s.includes('textarea:not([id*="inner"])'));
+  assert.ok(guarded.length >= 1, '应有带 :not([id*=inner]) 的泛化候选');
+});

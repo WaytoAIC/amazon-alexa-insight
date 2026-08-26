@@ -39,11 +39,16 @@ const DEFAULT_SELECTORS = {
     '.a-button-rufus',
   ],
   rufusInput: [
-    '#nav-rufus-content textarea',
-    '#rufus-view-context textarea',
-    '#nav-rufus-content [contenteditable="true"]',
+    // 2026-08-26 实测（认证后的面板）：提问框仍是稳定 ID #rufus-text-area
+    //（placeholder "Ask a shopping question"）。面板里另有一个**隐藏的反馈输入框**
+    // #rufus-text-area-inner-N（placeholder "Add your feedback..."），且在 DOM 里排更前 ——
+    // 泛化的 `textarea` 选择器会先命中它，把问题打进反馈框。故稳定 ID 必须排在最前，
+    // 泛化候选一律带 :not() 排除反馈框。
     '#rufus-text-area',
-    '#rufus-container-main-view textarea',
+    '#rufus-container-main-view textarea:not([id*="inner"])',
+    '#nav-rufus-content textarea:not([id*="inner"])',
+    '#rufus-view-context textarea:not([id*="inner"])',
+    '#nav-rufus-content [contenteditable="true"]',
     '.rufus-textarea-wrapper textarea',
     'textarea[placeholder*="Alexa" i]',
     '[contenteditable="true"][aria-label*="Alexa" i]',
@@ -138,10 +143,18 @@ async function collectMetadata(page, selectors = DEFAULT_SELECTORS) {
     eval(helpers);
     const t = findElement(sel.productTitle);
     const p = findElement(sel.productPrice);
-    return {
-      productTitle: t ? t.textContent.trim() : '',
-      price: p ? p.textContent.trim() : '',
-    };
+
+    // 兜底：订阅类等非典型商品页没有标准的 #productTitle（实测 B08JHCVHTY
+    // "blink plus plan with monthly auto-renewal" 整个商品详情 DOM 都不渲染），
+    // 但 document.title 里始终带商品名，形如 "Amazon.com: <商品名> : <类目>"。
+    let title = t ? t.textContent.trim() : '';
+    if (!title) {
+      const raw = (document.title || '').trim();
+      const m = raw.match(/^Amazon\.[a-z.]+\s*:\s*(.+?)(?:\s*:\s*[^:]+)?$/i);
+      title = (m ? m[1] : raw).trim();
+    }
+
+    return { productTitle: title, price: p ? p.textContent.trim() : '' };
   }, { sel: selectors, helpers: PAGE_HELPERS });
 }
 

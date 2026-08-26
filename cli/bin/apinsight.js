@@ -51,6 +51,8 @@ acc.command('reset-quota <id>').description('重置账号今日配额')
 program.command('login')
   .description('打开浏览器人工登录（cookie 失效时的兜底；工具不接触密码与验证码）')
   .requiredOption('--account <id>', '账号 id')
+  .option('--asin <asin>', '用于验证 Alexa 是否可用的商品页', 'B08JHCVHTY')
+  .option('--timeout-min <n>', '最多等待多少分钟', '15')
   .option('--channel <c>', 'chrome | chromium', 'chrome')
   .option('-v, --verbose')
   .action(async (o) => {

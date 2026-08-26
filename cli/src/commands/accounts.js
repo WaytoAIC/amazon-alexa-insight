@@ -12,7 +12,8 @@ const ci = require('../lib/cookie-import.js');
 const { AccountPool, ACCOUNTS_PATH, STATUS, atomicWriteJson } = require('../lib/account-pool.js');
 const { launchForAccount, firstPage } = require('../lib/browser.js');
 const guard = require('../lib/guard.js');
-const { marketplaceHome } = require('../lib/asins.js');
+const { marketplaceHome, productUrl } = require('../lib/asins.js');
+const collector = require('../lib/collector.js');
 const { createLogger } = require('../lib/log.js');
 
 function readAccountsConfig() {
@@ -86,7 +87,19 @@ async function importCookies(opts) {
   }
 }
 
-/** apinsight login --account us-a：headed 人工登录兜底 */
+/**
+ * apinsight login --account us-a：headed 人工登录。
+ *
+ * ⚠️ 成功判据是 **Alexa 面板真正可用**，不是账号栏有没有名字。
+ * 重放 cookie 后账号栏就已经显示 "Hello, X"（已识别级），若以此为准会立刻误报成功、
+ * 让人根本没机会登录，而 Alexa 依旧不可用。
+ *
+ * 流程：打开商品页 → 展开 Alexa 面板 → 若提示需要登录，直接把面板里那条
+ * max_auth_age=0 的链接导航过去（这是 Amazon 自己给的强制实时认证入口）→
+ * 人工完成登录 → 轮询直到 Alexa 面板可用。
+ *
+ * 全程不读取、不输入密码与验证码 —— 那部分只能由人在窗口里自己完成。
+ */
 async function login(opts) {
   const log = createLogger({ verbose: opts.verbose });
   const id = opts.account;
@@ -95,29 +108,85 @@ async function login(opts) {
   const account = cfg.accounts.find((a) => a.id === id);
   if (!account) throw new Error(`未知账号：${id}（先跑 accounts import 登记）`);
 
+  const marketplace = account.marketplace || 'US';
+  const asin = opts.asin || 'B08JHCVHTY';   // 用于探测 Alexa 面板的商品页
+  const timeoutMin = Number(opts.timeoutMin) || 15;
+
   const { context } = await launchForAccount(account, { headless: false, channel: opts.channel || 'chrome', log });
   const page = await firstPage(context);
-  await page.goto(marketplaceHome(account.marketplace || 'US'), { waitUntil: 'domcontentloaded' });
 
-  log.info('浏览器已打开。请在窗口里自行完成登录 —— 本工具不会读取或输入你的密码与验证码。');
-  log.info('登录成功后会自动检测并退出；也可以随时 Ctrl+C。');
-
-  const deadline = Date.now() + 10 * 60 * 1000;
   try {
+    await page.goto(productUrl(asin, marketplace), { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await guard.settleForAuth(page);
+
+    // 先看现在到底缺什么
+    const before = await probeAlexaState(page);
+    if (before.usable) {
+      log.ok('Alexa 面板已可用，无需登录。');
+      AccountPool.load({ only: [id] }).setEnabled(id, true);
+      return { ok: true, alreadyUsable: true };
+    }
+
+    if (before.signinHref) {
+      log.step('Alexa 要求实时认证，正在打开它给出的登录入口…');
+      const href = before.signinHref.startsWith('http')
+        ? before.signinHref
+        : new URL(before.signinHref, page.url()).toString();
+      await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    }
+
+    log.info('');
+    log.info(`  浏览器窗口已在 mini 上打开，停在 ${account.id} 的登录页。`);
+    log.info('  请在窗口里自行输入账号密码与验证码 —— 本工具不读取、不输入这些内容。');
+    log.info(`  登录后会自动检测 Alexa 是否真正可用，可用即自动收工（最多等 ${timeoutMin} 分钟）。`);
+    log.info('');
+
+    const deadline = Date.now() + timeoutMin * 60 * 1000;
+    let announced = false;
+
     while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 3000));
-      const status = await guard.isLoggedIn(context, page).catch(() => null);
-      if (status?.loggedIn) {
-        log.ok(`登录成功：${status.accountLine}`);
-        const pool = AccountPool.load({ only: [id] });
-        pool.setEnabled(id, true);      // 清掉 signin_expired / captcha_blocked
+      await new Promise((r) => setTimeout(r, 4000));
+
+      const url = page.url();
+      if (/\/ap\/(signin|cvf|mfa)/i.test(url)) continue;      // 还在登录流程里
+      if (!announced) { log.info('  已离开登录页，正在验证 Alexa…'); announced = true; }
+
+      // 回到商品页验 Alexa（登录后 Amazon 一般会自己跳回，这里兜底）
+      if (!/\/dp\//.test(url)) {
+        await page.goto(productUrl(asin, marketplace), { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+        await guard.settleForAuth(page);
+      }
+
+      const st = await probeAlexaState(page);
+      if (st.usable) {
+        const who = await guard.isLoggedIn(context, page).catch(() => ({ accountLine: '' }));
+        log.ok(`登录成功，Alexa 面板已可用：${who.accountLine || account.id}`);
+        AccountPool.load({ only: [id] }).setEnabled(id, true);   // 清掉 signin_expired / captcha_blocked
         return { ok: true };
       }
+      if (st.authRequired) announced = false;                 // 还没过认证，继续等
     }
-    log.warn('10 分钟内未检测到登录成功，已退出。');
+
+    log.warn(`${timeoutMin} 分钟内 Alexa 仍不可用，已退出。可重跑本命令再试。`);
     return { ok: false };
   } finally {
     await context.close();
+  }
+}
+
+/** 探测 Alexa 面板状态（复用 collector 的入口逻辑，避免两处判定漂移） */
+async function probeAlexaState(page) {
+  try {
+    await collector.openAssistantChat(page);
+    return { usable: true, authRequired: false, signinHref: null };
+  } catch (e) {
+    const panel = await collector.readPanelState(page);
+    return {
+      usable: false,
+      authRequired: e.incidentType === 'alexa_auth_required' || panel.authRequired,
+      signinHref: panel.signinHref || null,
+      text: panel.text || e.message,
+    };
   }
 }
 
@@ -157,4 +226,4 @@ function resetQuota(id) {
   console.log(`账号 ${id} 今日配额已重置`);
 }
 
-module.exports = { importCookies, login, list, setEnabled, resetQuota, readAccountsConfig, upsertAccount };
+module.exports = { importCookies, login, list, setEnabled, resetQuota, readAccountsConfig, upsertAccount, probeAlexaState };
