@@ -88,7 +88,7 @@ agent 到此**必须停下并升级给人**：
 git clone https://github.com/WaytoAIC/amazon-alexa-insight.git ~/apinsight-repo
 cd ~/apinsight-repo/cli
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install    # 用系统 Chrome，自带 chromium 用不上
-node --test test/*.test.js                        # 门禁：107 个必须全绿
+node --test test/*.test.js                        # 门禁：必须全绿，一个都不能红
 node bin/apinsight.js doctor --json               # 读 blockers 决定下一步
 ```
 

@@ -75,3 +75,10 @@ test('★ --skip-browser 时 usableAccounts 必须是 null（未知）而非 0�
   assert.match(src, /opts\.skipBrowser\s*\n?\s*\?\s*null/,
     'skipBrowser 时 usableAccounts 应为 null —— 把"没查"当成"没有"会让 agent 误判');
 });
+
+test('契约文档不写死测试数量（会过时）', () => {
+  const p = path.join(__dirname, '..', '..', 'CLAUDE.md');
+  const doc = fs.readFileSync(p, 'utf8');
+  const m = doc.match(/门禁[：:]\s*(\d+)\s*个/);
+  assert.strictEqual(m, null, `契约文档写死了测试数 ${m && m[1]}，会随功能增加过时`);
+});
