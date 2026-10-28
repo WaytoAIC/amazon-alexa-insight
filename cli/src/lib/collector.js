@@ -16,6 +16,7 @@
  */
 
 const sse = require('./sse-parser.js');
+const { extractThreadId } = require('./conversation.js');
 
 /** content.js:24-99 原样复制 */
 const DEFAULT_SELECTORS = {
@@ -92,6 +93,20 @@ const DEFAULT_SELECTORS = {
   ],
   // 2026-08 实测：侧面板内容容器
   rufusPanel: ['#nav-rufus-content', '#rufus-view-context', '#rufus-panel-header-container'],
+  // 面板里"开新对话"的控件。⚠️ 尚未在真实面板上实测到具体 DOM —— 先按常见写法多候选，
+  // 只在面板容器内查找（不会误点商品页上的按钮）；是否生效以回答流的 threadId 是否换新为准。
+  rufusNewChat: [
+    '[aria-label*="new chat" i]',
+    '[aria-label*="new conversation" i]',
+    '[aria-label*="start over" i]',
+    '[aria-label*="clear chat" i]',
+    '[aria-label*="clear conversation" i]',
+    '[data-csa-c-content-id*="new-chat" i]',
+    '[data-csa-c-content-id*="newchat" i]',
+    '[data-csa-c-action*="new-chat" i]',
+    '[data-testid*="new-chat" i]',
+    '#rufus-new-chat',
+  ],
   productTitle: ['#productTitle', '#title', 'h1.a-size-large', 'span#productTitle'],
   productPrice: [
     '.a-price .a-offscreen',
@@ -103,6 +118,12 @@ const DEFAULT_SELECTORS = {
 };
 
 const ALEXA_ENTRY_TEXTS = ['ask something else', 'ask alexa'];
+const NEW_CHAT_TEXTS = [
+  'new chat', 'new conversation', 'start a new chat', 'start new chat', 'start over',
+  'clear chat', 'clear conversation',
+];
+/** 疑似存放对话上下文的 Web Storage 键。只删这些，不碰登录态（登录态在 cookie 里） */
+const CONVERSATION_STORAGE_KEY_RE = /rufus|alexa|conversation|thread/i;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -258,6 +279,78 @@ async function readPanelState(page, selectors = DEFAULT_SELECTORS) {
   }, { sel: selectors, helpers: PAGE_HELPERS }).catch(() => ({ present: false, text: '', authRequired: false }));
 }
 
+/**
+ * 在面板里开一个新对话，保证本 ASIN 的回答不带上一个 ASIN（或上一个 run）的上下文。
+ *
+ * 插件与此前的 CLI 都没有这一步：openAssistantChat 看到输入框就返回 already-open，
+ * 对话一路延续 —— 见 conversation.js 头部的实证。
+ *
+ * 只在面板容器内找控件，找到就点，然后等面板里的历史回答清空（最多 5s）。
+ * 返回 { method, control, historyBefore, historyAfter, verified }：
+ *   method   'new-chat-button' | 'none'
+ *   verified 点击后历史确实清空。面板不渲染历史时 historyBefore 可能就是 0，
+ *            所以 verified 只是 DOM 侧证据，最终以 threadId 是否换新为准。
+ */
+async function startNewConversation(page, selectors = DEFAULT_SELECTORS) {
+  const historyBefore = await countResponses(page, selectors).catch(() => 0);
+
+  const control = await page.evaluate(({ sel, texts, helpers }) => {
+    eval(helpers);
+    const roots = [];
+    for (const s of sel.rufusPanel.concat(['#nav-flyout-rufus'])) {
+      try { document.querySelectorAll(s).forEach((el) => roots.push(el)); } catch (e) {}
+    }
+    const visible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+    const clickables = 'button, a, [role="button"], [role="menuitem"]';
+    for (const root of roots) {
+      for (const s of sel.rufusNewChat) {
+        let el = null;
+        try { el = root.querySelector(s); } catch (e) {}
+        if (el && visible(el)) { el.click(); return s; }
+      }
+      const wanted = texts.map((t) => t.toLowerCase());
+      for (const el of root.querySelectorAll(clickables)) {
+        const label = ((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '')).trim().toLowerCase();
+        if (label && label.length < 60 && wanted.some((t) => label.includes(t)) && visible(el)) {
+          el.click();
+          return `text:${label}`;
+        }
+      }
+    }
+    return null;
+  }, { sel: selectors, texts: NEW_CHAT_TEXTS, helpers: PAGE_HELPERS }).catch(() => null);
+
+  if (!control) return { method: 'none', control: null, historyBefore, historyAfter: historyBefore, verified: false };
+
+  const cleared = await waitForPredicate(page, ({ sel, helpers }) => {
+    eval(helpers);
+    return findAllElements(sel.rufusResponse).length === 0 && !!findElement(sel.rufusInput);
+  }, { sel: selectors, helpers: PAGE_HELPERS }, 5000);
+  const historyAfter = await countResponses(page, selectors).catch(() => -1);
+  await sleep(800);
+  return { method: 'new-chat-button', control, historyBefore, historyAfter, verified: cleared };
+}
+
+/**
+ * 兜底：找不到 New chat 控件时，删掉 Web Storage 里疑似存对话上下文的键。
+ * 调用方需在之后 reload 页面、重开面板才会生效。返回被删的键名（供日志与排查）。
+ * ⚠️ 未实测对话上下文是否存在这里（也可能在服务端按账号保存）—— 是否生效同样看 threadId。
+ */
+async function clearConversationStorage(page) {
+  return page.evaluate((reSource) => {
+    const re = new RegExp(reSource, 'i');
+    const removed = [];
+    for (const store of [window.localStorage, window.sessionStorage]) {
+      try {
+        const keys = [];
+        for (let i = 0; i < store.length; i++) keys.push(store.key(i));
+        for (const k of keys) if (k && re.test(k)) { store.removeItem(k); removed.push(k); }
+      } catch (e) {}
+    }
+    return removed;
+  }, CONVERSATION_STORAGE_KEY_RE.source).catch(() => []);
+}
+
 /** content.js:286-343 移植：保留 React native setter 方案 */
 async function askQuestion(page, question, selectors = DEFAULT_SELECTORS) {
   const result = await page.evaluate(async ({ sel, q, helpers }) => {
@@ -327,6 +420,7 @@ async function waitForNetworkAnswer(page, cursor, question, detectionConfig = {}
   const checkIntervalMs = checkInterval * 1000;
 
   let best = '';
+  let bestThreadId = '';
   let lastBest = '';
   let stableCount = 0;
 
@@ -342,6 +436,7 @@ async function waitForNetworkAnswer(page, cursor, question, detectionConfig = {}
     if (!pulled) continue;
 
     let completeAnswer = '';
+    let completeThreadId = '';
     let sawTruncated = false;
     for (const stream of pulled.streams) {
       if (!stream.raw) continue;
@@ -353,25 +448,33 @@ async function waitForNetworkAnswer(page, cursor, question, detectionConfig = {}
         continue;
       }
       const candidate = sse.extractAnswerFromAssistantSse(stream.raw, question);
-      if (candidate.length > best.length) best = candidate;
-      if (stream.complete && candidate.length > completeAnswer.length) completeAnswer = candidate;
+      const threadId = extractThreadId(stream.raw);
+      if (candidate.length > best.length) { best = candidate; bestThreadId = threadId; }
+      if (stream.complete && candidate.length > completeAnswer.length) {
+        completeAnswer = candidate;
+        completeThreadId = threadId;
+      }
     }
 
     if (best && best === lastBest) {
       stableCount++;
-      if (stableCount >= stableChecks) return { answer: best, source: 'network', complete: false };
+      if (stableCount >= stableChecks) {
+        return { answer: best, source: 'network', complete: false, threadId: bestThreadId };
+      }
     } else {
       stableCount = 0;
     }
     lastBest = best;
 
-    if (completeAnswer) return { answer: completeAnswer, source: 'network', complete: true };
+    if (completeAnswer) {
+      return { answer: completeAnswer, source: 'network', complete: true, threadId: completeThreadId };
+    }
     if (sawTruncated && !best) {
       throw new Error(`SSE 流超出 ${'2MB'} 上限被截断，JSON Patch 根节点丢失，无法重建答案`);
     }
   }
 
-  if (best) return { answer: best, source: 'network', complete: false, timedOut: true };
+  if (best) return { answer: best, source: 'network', complete: false, timedOut: true, threadId: bestThreadId };
   throw new Error('网络流未捕获到 Alexa 回答');
 }
 
@@ -454,9 +557,13 @@ async function askAndCapture(page, question, detectionConfig = {}, selectors = D
 module.exports = {
   DEFAULT_SELECTORS,
   ALEXA_ENTRY_TEXTS,
+  NEW_CHAT_TEXTS,
+  CONVERSATION_STORAGE_KEY_RE,
   PAGE_HELPERS,
   collectMetadata,
   openAssistantChat,
+  startNewConversation,
+  clearConversationStorage,
   readPanelState,
   askQuestion,
   countResponses,

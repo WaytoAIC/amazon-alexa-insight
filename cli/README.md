@@ -162,7 +162,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.waytoaic.apinsight.p
 
 run 目录下：
 
-- `results.jsonl` — 全量明细（含 `account` / `captureSource` / `elapsedMs` / `superseded`）
+- `results.jsonl` — 全量明细（含 `account` / `captureSource` / `elapsedMs` / `superseded` / `threadId` / `conversationReset` / `contextLeak`；带 `contextLeak` 的行是疑似串台，对照分析请剔除）
 - `alexa-insight-<站点>-<时间>.csv` — **与插件逐字节同 schema 的 9 列**（有差分测试保障）
 - `alexa-insight-<站点>-<时间>.json`
 - `state.json` / `run.log`

@@ -9,6 +9,9 @@
  *
  * 一处明知故改：background.js:201-203 导航失败只写日志直接跳过，该 ASIN 全部题
  * 静默丢失且无 error 行。这里改为写一行 question='NAVIGATION_FAILED' 的 ASIN 级 error 行。
+ *
+ * 另一处补漏：插件从不开新对话，换 ASIN 后 Alexa 带着上一个商品的上下文作答（串台）。
+ * 这里每个 ASIN 开问前强制新对话，并逐行用 threadId / 回指措辞复核，见 lib/conversation.js。
  */
 
 const path = require('path');
@@ -24,6 +27,7 @@ const { Pacer, parseRange, DEFAULTS: PACE_DEFAULTS, sleep } = require('../lib/pa
 const { resolveQuestions, shuffle } = require('../lib/questions.js');
 const { resolveAsins, productUrl } = require('../lib/asins.js');
 const { createLogger } = require('../lib/log.js');
+const conversation = require('../lib/conversation.js');
 
 const NAVIGATION_FAILED = 'NAVIGATION_FAILED';
 const RETRIES_EXHAUSTED = 'RETRIES_EXHAUSTED';
@@ -32,6 +36,29 @@ function makeRunId(marketplace) {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}-${marketplace}`;
+}
+
+/**
+ * 每个 ASIN 开问前强制新对话。先点面板的 New chat；找不到控件就清掉疑似存对话上下文的
+ * Web Storage、重载页面重开面板。都不成也不阻断采集 —— 逐行的串台复核兜底。
+ */
+async function resetConversation(page, pacer, log) {
+  let reset = await collector.startNewConversation(page);
+  if (reset.method !== 'none') return reset;
+
+  const removed = await collector.clearConversationStorage(page);
+  if (!removed.length) return reset;
+  log.debug(`  未找到 New chat 控件，清除 ${removed.length} 个对话相关存储键后重载：${removed.join(', ')}`);
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
+  } catch (e) {
+    log.warn(`  清存储后重载失败：${e.message}`);
+    return reset;
+  }
+  await pacer.settle();
+  await collector.openAssistantChat(page);     // 认证类异常交给调用方原有的处理
+  reset = await collector.startNewConversation(page);
+  return reset.method === 'none' ? { ...reset, method: 'storage-cleared', storageKeys: removed } : reset;
 }
 
 /** 每题的硬超时，复刻 background.js:643 */
@@ -93,6 +120,12 @@ async function collect(opts) {
 
   const done = state.doneSet({ retryErrors: Boolean(opts.retryErrors) });
   if (resuming) log.info(`  已完成 ${done.size} 题，跳过`);
+
+  // threadId → 最先用它的 ASIN。另一个 ASIN 的回答落进同一 thread = 串台实锤
+  const threadOwners = new Map();
+  for (const r of state.materializedResults()) {
+    if (r.threadId && !threadOwners.has(r.threadId)) threadOwners.set(r.threadId, r.asin);
+  }
 
   const limit = opts.limit ? Number(opts.limit) : Infinity;
   const runDeadline = opts.maxHours ? Date.now() + Number(opts.maxHours) * 3600 * 1000 : null;
@@ -203,8 +236,10 @@ async function collect(opts) {
           log.debug(`  标题「${meta.productTitle.slice(0, 40)}」价格「${meta.price}」`);
         }
 
+        let reset;
         try {
           await collector.openAssistantChat(page);
+          reset = await resetConversation(page, pacer, log);
         } catch (e) {
           log.error(`  ${e.message}`);
           if (e.incidentType === 'alexa_auth_required') {
@@ -223,6 +258,13 @@ async function collect(opts) {
           asinDone = true;
           break;
         }
+
+        if (reset.method === 'new-chat-button') {
+          log.debug(`  新对话：${reset.control}（历史 ${reset.historyBefore} → ${reset.historyAfter}）`);
+        } else {
+          log.warn(`  未能确认开启新对话（${reset.method}），本 ASIN 的回答逐行按 threadId / 回指措辞复核串台`);
+        }
+        let firstInConversation = true;
 
         // ---- 逐题 ----
         let yielded = false;
@@ -247,8 +289,18 @@ async function collect(opts) {
               }),
               runId: state.data.runId, questionIndex: i, categoryId: q.categoryId,
               captureSource: r.source, elapsedMs: r.elapsedMs, account: account.id,
+              threadId: r.threadId || '', conversationReset: reset.method,
             };
+            const leak = conversation.detectContextLeak({
+              asin, answer: r.answer, threadId: r.threadId, threadOwners,
+              isFirstInConversation: firstInConversation, conversationFresh: reset.verified,
+            });
+            if (r.threadId && !threadOwners.has(r.threadId)) threadOwners.set(r.threadId, asin);
             log.ok(`    ${r.source} · ${r.answer.length} 字 · ${Math.round(r.elapsedMs / 1000)}s`);
+            if (leak.length) {
+              row.contextLeak = leak;
+              log.warn(`    疑似串台（已标记 contextLeak，对照分析请剔除）：${leak.join(' / ')}`);
+            }
           } catch (e) {
             row = {
               ...exporter.errorRow({ asin, category: q.category, question: q.question, error: e.message }),
@@ -257,6 +309,7 @@ async function collect(opts) {
             log.error(`    ${e.message}`);
           } finally {
             hard.cancel();
+            firstInConversation = false;   // 题已发出，无论成败 Alexa 都已记下这一轮
           }
 
           state.appendResult(row);
@@ -332,7 +385,8 @@ async function collect(opts) {
     fs.writeFileSync(path.join(state.dir, exporter.exportFilename(state.data.marketplace, 'json')), json);
 
     const c = state.data.counters;
-    log.step(`结束：成功 ${c.success} / 错误 ${c.error} / ASIN 级失败 ${c.asinFailed} / 作废 ${c.superseded}`);
+    log.step(`结束：成功 ${c.success} / 错误 ${c.error} / ASIN 级失败 ${c.asinFailed} / 作废 ${c.superseded}`
+      + (c.contextLeak ? ` / 疑似串台 ${c.contextLeak}` : ''));
     log.info(`  ${state.dir}`);
     log.close();
     return { exitCode, dir: state.dir, counters: c };
@@ -348,4 +402,4 @@ function latestRunDir(outDir) {
   return dirs[0] || null;
 }
 
-module.exports = { collect, latestRunDir, NAVIGATION_FAILED, RETRIES_EXHAUSTED };
+module.exports = { collect, latestRunDir, resetConversation, NAVIGATION_FAILED, RETRIES_EXHAUSTED };

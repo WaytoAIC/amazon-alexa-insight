@@ -52,7 +52,7 @@ class RunState {
       accounts,
       cursor: { asinIndex: 0, questionIndex: 0 },
       status: STATUS.RUNNING,
-      counters: { success: 0, error: 0, asinFailed: 0, superseded: 0 },
+      counters: { success: 0, error: 0, asinFailed: 0, superseded: 0, contextLeak: 0 },
       accountUsage: {},
       lastError: null,
     };
@@ -78,6 +78,7 @@ class RunState {
     if (row.superseded) this.data.counters.superseded++;
     else if (row.status === 'error') this.data.counters.error++;
     else this.data.counters.success++;
+    if (row.contextLeak && !row.superseded) this.data.counters.contextLeak = (this.data.counters.contextLeak || 0) + 1;
     if (row.account) {
       this.data.accountUsage[row.account] = (this.data.accountUsage[row.account] || 0) + 1;
     }

@@ -107,6 +107,12 @@ CSV/JSON 导出、`state.json`、`run.log`。
 
 `captureSource` 是质量信号：`network` 正常；大量 `dom` 说明主路有问题，查 run.log。
 
+**串台信号**：每个 ASIN 开问前都会强制新对话，`conversationReset` 记录方式
+（`new-chat-button` 正常；`none` / `storage-cleared` = 没能确认）。带 `contextLeak` 的行
+（`shared_thread:<ASIN>` = 与别的 ASIN 同一 Alexa 对话，实锤；`back_reference:…` = 回指旧对话）
+**做竞品对照时必须剔除**，`state.json` 的 `counters.contextLeak` 是总数。
+导出的 CSV/JSON 不带这些字段，要过滤请读 `results.jsonl`。
+
 ## 改代码前必读
 
 1. **`cli/` 与插件共享解析逻辑，差分测试锁住一致性**

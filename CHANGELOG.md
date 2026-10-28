@@ -5,6 +5,23 @@
 ## [Unreleased]
 
 ### Fixed
+- **CLI 换 ASIN 后对话串台 · Conversation bleed across ASINs (CLI)**：采集器从不开新对话，
+  Alexa 带着上一个商品（甚至上一个 run）的上下文作答。实测 2026-10-27 竞品批次里
+  COSY HOMEER B09M7WWTFP 第 1 题出现「the MontVoo jute treads we discussed earlier」，
+  而 MontVoo 是前一个批次的商品，竞品对照结论被污染且仍记为 `success`。
+  现在每个 ASIN 开问前强制新对话（点面板的 New chat；找不到控件则清对话相关的
+  Web Storage 并重载），并逐行复核：回答流里的 `threadId` 与别的 ASIN 相同、或新对话
+  第一题就回指"之前聊过"，该行在 `results.jsonl` 标 `contextLeak`（附原因），
+  `state.json` 计入 `counters.contextLeak`。新增 jsonl 字段 `threadId` / `conversationReset`。
+  导出 CSV/JSON 的 schema 不变。
+  The collector never started a new chat, so Alexa answered with the previous product's
+  (or previous run's) context. Each ASIN now starts in a fresh conversation (panel "New chat",
+  falling back to clearing conversation-related Web Storage and reloading), and every row is
+  cross-checked: a `threadId` shared with another ASIN, or a back-reference ("we discussed
+  earlier") in a conversation's first answer, marks the row with `contextLeak`. New jsonl
+  fields `threadId` / `conversationReset`; export schema unchanged.
+  ⚠️ New chat 控件的选择器尚未在真实面板上实测，是否生效以 `threadId` 是否逐 ASIN 换新为准。
+  The "New chat" selectors are not yet verified on the live panel; `threadId` is the ground truth.
 - **回答内容被切碎重复**：Alexa 的答案是 RFC 6902 JSON Patch 流（`type:"JSONPatches"`，
   `op:add/replace` + JSON Pointer 路径），实测单条流 193 次 `replace` + 14 次 `add`，
   同一路径被反复覆盖。原实现把见过的每个 `value.children` 全收集，只靠"后面有更长版本

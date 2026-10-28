@@ -25,6 +25,7 @@ const CSV_HEADERS = [
 /** CLI 内部附加字段，只进 jsonl，不进正式导出 */
 const INTERNAL_FIELDS = [
   'runId', 'questionIndex', 'categoryId', 'captureSource', 'elapsedMs', 'account', 'superseded',
+  'threadId', 'conversationReset', 'contextLeak',
 ];
 
 function csvEscape(value) {
